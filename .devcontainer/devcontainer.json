@@ -1,0 +1,75 @@
+{
+  "name": "Azure RAG Agent PoC",
+  "image": "mcr.microsoft.com/devcontainers/python:3.10",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  
+  "postCreateCommand": "pip install -r requirements.txt",
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "ms-azuretools.vscode-bicep",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  
+  "forwardPorts": [8000]
+}
+```
+
+4. 「**Commit changes**」
+
+### 4. `.gitignore` を追加（まだない場合）
+
+1. 「**Add file**」→「**Create new file**」
+2. ファイル名: `.gitignore`
+3. 以下をコピペ：
+```
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.local
+.vscode/
+.idea/
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.DS_Store
+```
+
+4. 「**Commit changes**」
+
+---
+
+## 修正後の正しい構成
+```
+azure-rag-agent-poc/
+├── .devcontainer/
+│   └── devcontainer.json    ← ここに配置
+├── infra/
+│   └── main.bicep           ← ここだけに配置
+├── src/
+│   └── (Pythonファイル)
+├── tests/
+│   └── (テストファイル)
+├── .env.example
+├── .gitignore               ← 追加
+├── README.md
+└── requirements.txt
