@@ -6,6 +6,8 @@ Features:
 - Document batch upload
 - Skillset configuration (optional AI enrichment)
 """
+import os
+from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
@@ -32,7 +34,11 @@ class SearchIndexManager:
     def __init__(self):
         """Initialize with Azure credentials."""
         settings = get_settings()
-        credential = get_azure_credential()
+        api_key = os.getenv("AZURE_SEARCH_API_KEY")
+        if api_key:
+            credential = AzureKeyCredential(api_key)
+        else:
+            credential = get_azure_credential()
 
         self.index_client = SearchIndexClient(
             endpoint=settings.search_endpoint,
@@ -261,7 +267,11 @@ class DocumentIngestionPipeline:
         from azure.storage.blob import BlobServiceClient
 
         settings = get_settings()
-        credential = get_azure_credential()
+        api_key = os.getenv("AZURE_SEARCH_API_KEY")
+        if api_key:
+            credential = AzureKeyCredential(api_key)
+        else:
+            credential = get_azure_credential()
 
         blob_service = BlobServiceClient(
             account_url=settings.storage_account_url,
