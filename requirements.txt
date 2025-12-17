@@ -1,0 +1,23 @@
+# Azure SDKs
+azure-identity>=1.15.0
+azure-search-documents>=11.6.0
+azure-storage-blob>=12.19.0
+
+# OpenAI (Azure対応)
+openai>=1.12.0
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Document Processing
+tiktoken>=0.5.0
+python-dotenv>=1.0.0
+
+# Development & Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.26.0
+
+# Optional: Streamlit UI
+streamlit>=1.31.0
