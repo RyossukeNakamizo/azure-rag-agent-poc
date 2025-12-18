@@ -21,3 +21,8 @@ httpx>=0.26.0
 
 # Optional: Streamlit UI
 streamlit>=1.31.0
+
+# Enterprise MVP Dependencies (Added 2024-12-18)
+structlog==24.1.0                    # Structured logging
+python-jose[cryptography]==3.3.0     # JWT token handling
+locust==2.20.0                       # Load testing
