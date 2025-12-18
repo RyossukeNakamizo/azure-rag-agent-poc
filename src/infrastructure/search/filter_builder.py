@@ -3,7 +3,7 @@ OData Filter Builder - Safe Filter Construction for Azure AI Search
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 import structlog
 
@@ -59,9 +59,13 @@ class FilterBuilder:
             return self
         
         self._validate_field_name(field)
-        encoded_values = [self._encode_value(v) for v in values]
-        values_str = ", ".join(encoded_values)
+        # For search.in, values should be comma-delimited without individual quotes
+        # Format: search.in(field, 'val1,val2', ',')
+        # Use raw values without _encode_value() to avoid double-quoting
+        str_values = [str(v) for v in values]
+        values_str = ",".join(str_values)
         self.filters.append(f"search.in({field}, '{values_str}', ',')")
+        logger.debug("in_filter_added", field=field, value_count=len(values))
         return self
     
     def add_date_range(
@@ -113,6 +117,10 @@ class FilterBuilder:
         elif isinstance(value, (int, float)):
             return str(value)
         elif isinstance(value, datetime):
+            # timezone情報を除去してからISO形式+Zを付与
+            if value.tzinfo is not None:
+                # timezone-aware の場合、UTCに変換してからtzinfoを除去
+                value = value.astimezone(timezone.utc).replace(tzinfo=None)
             return value.isoformat() + 'Z'
         elif isinstance(value, str):
             sanitized = self._sanitize_string(value)
@@ -123,6 +131,10 @@ class FilterBuilder:
 
 
 def create_tenant_filter(tenant_id: str, additional_filters: Optional[Dict[str, Any]] = None) -> str:
+    if not tenant_id or not tenant_id.strip():
+        logger.error("empty_tenant_id")
+        raise ValueError("tenant_id cannot be empty or whitespace")
+    
     builder = FilterBuilder(tenant_id)
     
     if additional_filters:

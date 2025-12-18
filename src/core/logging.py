@@ -3,6 +3,7 @@ Structured Logging Configuration with structlog
 """
 
 import logging
+import os
 import sys
 from typing import Any, Dict
 import structlog
@@ -12,7 +13,7 @@ from structlog.typing import EventDict, WrappedLogger
 def add_app_context(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
     """Add application context to log events."""
     event_dict["app"] = "azure-rag-agent"
-    event_dict["environment"] = "production"
+    event_dict["environment"] = os.getenv("ENVIRONMENT", "development")
     return event_dict
 
 

@@ -7,6 +7,8 @@ from fastapi import Header, HTTPException, status
 from jose import JWTError, jwt
 import structlog
 
+from ..core.exceptions import AuthenticationException
+
 logger = structlog.get_logger(__name__)
 
 
@@ -43,6 +45,13 @@ class TenantResolver:
         self,
         authorization: Optional[str] = Header(None, description="JWT Bearer token")
     ) -> str:
+        if not self.jwt_secret:
+            logger.error("jwt_secret_not_configured")
+            raise AuthenticationException(
+                message="JWT authentication is not configured",
+                details={"reason": "jwt_secret is not set"}
+            )
+        
         if not authorization:
             logger.warning("missing_authorization_header")
             raise HTTPException(
