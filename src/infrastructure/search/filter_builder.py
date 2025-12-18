@@ -53,18 +53,28 @@ class FilterBuilder:
         self.filters.append(f"{field} lt {encoded_value}")
         return self
     
-    def add_in(self, field: str, values: List[Any]) -> "FilterBuilder":
+    def add_in(self, field: str, values: List[Any], delimiter: str = ",") -> "FilterBuilder":
+        """Add an OData search.in filter for multi-value matching.
+        
+        Args:
+            field: Field name to filter
+            values: List of values to match
+            delimiter: Delimiter for values (default: comma)
+        
+        Returns:
+            Self for method chaining
+        
+        Example:
+            >>> builder.add_in("category", ["tech", "science"])
+            # Generates: search.in(category, 'tech,science', ',')
+        """
         if not values:
             logger.warning("empty_values_for_in_filter", field=field)
             return self
         
         self._validate_field_name(field)
-        # For search.in, values should be comma-delimited without individual quotes
-        # Format: search.in(field, 'val1,val2', ',')
-        # Use raw values without _encode_value() to avoid double-quoting
-        str_values = [str(v) for v in values]
-        values_str = ",".join(str_values)
-        self.filters.append(f"search.in({field}, '{values_str}', ',')")
+        in_values_str = self._encode_search_in_values(values, delimiter=delimiter)
+        self.filters.append(f"search.in({field}, '{in_values_str}', '{delimiter}')")
         logger.debug("in_filter_added", field=field, value_count=len(values))
         return self
     
@@ -108,6 +118,52 @@ class FilterBuilder:
     
     def _sanitize_string(self, value: str) -> str:
         return value.replace("'", "''")
+    
+    def _encode_search_in_values(self, values: List[Any], delimiter: str = ",") -> str:
+        """Encode values for Azure AI Search `search.in` second parameter.
+
+        Azure AI Search expects the second parameter to be a *single* string containing
+        delimiter-separated, *unquoted* values, wrapped in one set of quotes, e.g.:
+        `search.in(field, 'a,b,c', ',')`.
+        
+        Args:
+            values: List of values to encode
+            delimiter: Delimiter for values
+            
+        Returns:
+            Encoded string for search.in second parameter
+        """
+        if any(v is None for v in values):
+            logger.error("none_value_for_in_filter", values=values)
+            raise ValueError("search.in values must not include None")
+
+        encoded_parts: List[str] = []
+        for v in values:
+            if isinstance(v, bool):
+                part = "true" if v else "false"
+            elif isinstance(v, (int, float)):
+                part = str(v)
+            elif isinstance(v, datetime):
+                # timezone情報を除去してからISO形式+Zを付与
+                if v.tzinfo is not None:
+                    v = v.astimezone(timezone.utc).replace(tzinfo=None)
+                part = v.isoformat() + "Z"
+            else:
+                part = str(v)
+
+            # Values are embedded inside a single-quoted string argument; escape single quotes.
+            part = self._sanitize_string(part)
+            encoded_parts.append(part)
+
+        if any(delimiter in p for p in encoded_parts):
+            logger.warning(
+                "in_filter_value_contains_delimiter",
+                delimiter=delimiter,
+                values=encoded_parts,
+            )
+
+        # IMPORTANT: no spaces; spaces become part of the value when split by delimiter.
+        return delimiter.join(encoded_parts)
     
     def _encode_value(self, value: Any) -> str:
         if value is None:
