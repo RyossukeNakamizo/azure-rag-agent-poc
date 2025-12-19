@@ -100,3 +100,100 @@ def add_in(self, field: str, values: List[Any], delimiter: str = ",") -> "Filter
 - [Azure AI Search OData Specification](https://learn.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax)
 - [Cursor Bot Review Thread](https://github.com/RyossukeNakamizo/azure-rag-agent-poc/pull/1)
 - [Original Bug Report](https://github.com/RyossukeNakamizo/azure-rag-agent-poc/pull/1#discussion_r1234567890)
+
+---
+
+### 2025-12-19: AI Foundry環境構築アプローチ選定
+
+**Status**: Accepted
+
+**Context**
+- 初回デプロイ時にRBAC重複エラー発生（RoleAssignmentExists）
+- AI Foundry Hub (`ai-hub-dev-ldt4idhueffoe`) とProject (`rag-agent-project`) は既に作成済み
+- Connections（Azure OpenAI, Azure AI Search）のみ未作成
+- Azure AI Search Indexは未作成（Day 16で実施予定）
+
+**Decision**
+- **main-ai-foundry.bicepを既存リソース参照型に変更**
+  - `module`から`resource existing`に変更
+  - Connections作成のみに特化したデプロイ
+  - RBAC割り当てをスキップ（既存のまま維持）
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| 全リソース削除して再作成 | クリーンスタート、一貫性 | Hub/Projectデータ喪失リスク | 既存リソース保護優先 |
+| RBAC手動削除後に再デプロイ | 完全自動化維持 | 削除操作のリスク | 運用負荷増加 |
+| 手動でConnections作成 | 即座完了、確実性 | IaC放棄、再現性喪失 | 自動化方針と矛盾 |
+
+**Consequences**
+- デプロイ時間: 7秒（高速化達成）
+- RBAC権限反映待ち: 最大10分（Azure伝播遅延）
+- Index作成はDay 16に延期（段階的実装）
+- IaC自動化方針を維持
+
+**Validation**
+- Connections作成成功: 2件（azure-openai-connection, azure-search-connection）
+- GPT-4o動作確認: ✅ 正常応答
+- RBAC設定完了: 6ロール割り当て確認
+
+---
+
+### 2025-12-19: パラメータファイル形式選定（.bicepparam vs JSON）
+
+**Status**: Accepted
+
+**Context**
+- .bicepparam形式で`using`構文エラーが継続発生
+- `unrecognized template parameter 'using'`エラーが解決不能
+- Azure CLI最新版でも同様のエラー
+- デプロイ阻害要因として時間消費
+
+**Decision**
+- **JSON形式パラメータファイル（.parameters.json）を採用**
+- 従来の実績ある形式に回帰
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| .bicepparam形式継続 | モダン、型安全 | エラー解決不能、時間消費 | 実用性不足 |
+| インラインパラメータ | 最も確実 | 再利用性低、管理困難 | 本番運用に不適 |
+
+**Consequences**
+- Validation/What-if/Deploy全て即座成功
+- 本番環境での安定性保証
+- .bicepparam移行は将来検討（Azure CLI完全サポート確認後）
+
+**Validation**
+- デプロイ成功率: 100%
+- エラー発生: 0件
+
+---
+
+### 2025-12-19: RBAC権限範囲決定（User vs Managed Identity）
+
+**Status**: Accepted
+
+**Context**
+- AI Foundry StudioからAzure AI Searchアクセス時に権限エラー
+- ユーザー（Ryosuke.Nakamizo@hotmail.com）に権限不足
+- Managed Identity（AI Foundry Hub）も同様の権限必要
+
+**Decision**
+- **ユーザーとManaged Identity両方に`Search Index Data Reader`を付与**
+- 段階的付与アプローチ（まずUser、次にManaged Identity）
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Userのみ付与 | 最小権限 | Studio機能制限 | 実用性不足 |
+| API Key認証に切替 | 即座動作 | セキュリティ低下 | ベストプラクティス違反 |
+
+**Consequences**
+- セキュリティベストプラクティス維持（API Keyレス）
+- RBAC権限伝播待ち時間: 最大10分
+- 将来の拡張性確保（追加ユーザー対応容易）
+
+**Validation**
+- RBAC割り当て完了: Portal確認済み
+- 権限反映待ち: 進行中

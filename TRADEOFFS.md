@@ -114,3 +114,83 @@ Rejected due to **critical type safety and security failures**. While simpler, i
 - [Azure AI Search OData Filter Syntax](https://learn.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax)
 - [Python str() Gotchas](https://docs.python.org/3/library/stdtypes.html#str)
 - [OWASP Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html)
+
+---
+
+### .bicepparam形式
+
+**Category**: Configuration Format
+
+**Considered For**: Bicepパラメータファイル形式
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Azure CLI互換性 | High | 2/5 | `using`構文エラー継続、解決不能 |
+| 開発効率 | High | 1/5 | トラブルシューティングに45分消費 |
+| 安定性 | High | 2/5 | 本番環境で未検証、リスク高 |
+| 型安全性 | Medium | 5/5 | 理論上は優位だが実用不可 |
+
+**Final Verdict**: JSON形式が確実性・互換性・実績で圧倒的優位
+
+**Revisit Trigger**: 
+- Azure CLI 2.60.0+で.bicepparam完全サポート確認
+- Microsoft公式ドキュメントで本番推奨時
+
+---
+
+### 全リソース削除して再作成
+
+**Category**: Deployment Strategy
+
+**Considered For**: RBAC重複エラー解決方法
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| データ保護 | High | 1/5 | Hub/Projectメタデータ喪失リスク |
+| 実装時間 | Medium | 2/5 | 再作成に10-15分必要 |
+| 運用リスク | High | 1/5 | 本番環境で同様の操作は危険 |
+
+**Final Verdict**: 既存リソース参照アプローチでリスク回避
+
+**Revisit Trigger**: 完全にクリーンな環境が必要な場合のみ
+
+---
+
+### API Key認証
+
+**Category**: Authentication Method
+
+**Considered For**: Azure AI Search Connection認証
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| セキュリティ | High | 1/5 | キー漏洩リスク、ローテーション負荷 |
+| 監査性 | High | 2/5 | アクセス追跡困難 |
+| ベストプラクティス | High | 1/5 | Microsoftが非推奨 |
+| 即効性 | Low | 5/5 | 唯一の利点だが不十分 |
+
+**Final Verdict**: Managed Identity認証で最大10分待機する価値あり
+
+**Revisit Trigger**: ローカル開発環境での一時使用のみ
+
+---
+
+### インデックス即座作成（Day 15内完了）
+
+**Category**: Implementation Scope
+
+**Considered For**: Azure AI Search Index作成タイミング
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| 複雑性 | High | 2/5 | Schema設計、データ準備で30-60分必要 |
+| Day 15目標達成 | High | 3/5 | Hub/Project/Connections完了で十分 |
+| 段階的実装 | Medium | 5/5 | Day 16で集中実施の方が効率的 |
+
+**Final Verdict**: Day 16でIndex作成に集中する方が品質向上
+
+**Revisit Trigger**: なし（適切な判断）
