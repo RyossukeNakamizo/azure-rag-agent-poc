@@ -1,59 +1,63 @@
 # Azure RAG Agent POC
 
-RAG (Retrieval-Augmented Generation) システムの概念実証プロジェクト。
-Azure AI Foundry Agents with Function Calling実装。
+> 工場向けAzure AI Foundry RAG/Agentシステムの実証実験プロジェクト
+
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Azure AI](https://img.shields.io/badge/Azure-AI%20Foundry-0078D4.svg)](https://azure.microsoft.com/products/ai-services/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## プロジェクト概要
+## 📋 プロジェクト概要
 
-工場向けAIアシスタントの構築を目的とした、Azure AI FoundryベースのエンタープライズグレードRAGシステム。
+日野コンピューターシステム株式会社の工場向けWebアプリケーション開発プロジェクト。Azure AI Foundryを活用したRAG（Retrieval-Augmented Generation）およびAgent機能を実装し、工場運用の効率化を目指します。
 
-**主要機能**：
-- ✅ Function Calling（4ツール実装）
-- ✅ Hybrid Search（Azure AI Search）
-- ✅ Azure OpenAI統合（gpt-4o、text-embedding-ada-002）
-- ✅ Managed Identity認証
-- ✅ pytest完全カバレッジ（27テスト）
+### 主要機能
+
+- 🔍 **Hybrid Search RAG**: Azure AI Search（ベクトル＋キーワード検索）
+- 🤖 **AI Agent**: Azure AI Foundry Assistants API + Function Calling
+- 📊 **工場データ分析**: 設備状態監視、データ分析ツール統合
+- 🌐 **Web API**: FastAPI による REST API（開発予定）
 
 ---
 
-## アーキテクチャ
+## 🏗️ システムアーキテクチャ
 
 ```
-User Query
-    │
-    ▼
-Azure AI Foundry Agent (Assistants API)
-    │
-    ├─▶ Function Calling Tools
-    │   ├─ search_documents (Azure AI Search)
-    │   ├─ calculate (Math evaluation)
-    │   ├─ get_current_datetime (Timezone-aware)
-    │   └─ get_equipment_status (Factory MES stub)
-    │
-    ▼
-Azure OpenAI (gpt-4o)
-    │
-    ▼
-Structured Response
+┌─────────────────────────────────────────────────────────────┐
+│                        Azure Cloud                          │
+│                                                             │
+│  ┌──────────┐    ┌─────────────┐    ┌──────────────────┐   │
+│  │ FastAPI  │───▶│ AI Foundry  │───▶│ Azure AI Search  │   │
+│  │ Web App  │    │ Assistant   │    │ (Hybrid Search)  │   │
+│  └──────────┘    └──────┬──────┘    └──────────────────┘   │
+│                         │                                   │
+│                         ▼                                   │
+│                  ┌──────────────┐                           │
+│                  │ Azure OpenAI │                           │
+│                  │ (GPT-4o)     │                           │
+│                  └──────────────┘                           │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+詳細は [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) を参照。
 
 ---
 
-## セットアップ
+## 🚀 クイックスタート
 
 ### 前提条件
 
 - Python 3.11+
-- Azure Subscription
-- Azure CLI認証済み（`az login`）
+- Azure サブスクリプション
+- Azure CLI
+- Git
 
-### インストール
+### セットアップ
 
 ```bash
 # リポジトリクローン
-git clone https://github.com/RyossukeNakamizo/azure-rag-agent-poc.git
+git clone https://github.com/your-org/azure-rag-agent-poc.git
 cd azure-rag-agent-poc
 
 # 仮想環境作成
@@ -65,209 +69,127 @@ pip install -r requirements.txt
 
 # 環境変数設定
 cp .env.example .env
-# .envを編集してAzureリソース情報を設定
+# .env を編集してAzure認証情報を設定
 ```
 
-### 環境変数（.env）
+### Azure リソースのデプロイ
 
 ```bash
-# Azure AI Search
-AZURE_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
-AZURE_SEARCH_INDEX=rag-docs-index
+# Azureログイン
+az login
 
-# Azure OpenAI
-AZURE_OPENAI_ENDPOINT=https://<openai-resource>.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_CHAT=gpt-4o
-AZURE_OPENAI_DEPLOYMENT_EMBEDDING=text-embedding-ada-002
-AZURE_OPENAI_API_VERSION=2024-10-01-preview
+# リソースグループ作成
+az group create --name rg-rag-poc --location japaneast
 
-# Azure AI Foundry Assistant
-AZURE_ASSISTANT_ID=asst_szAH6GUpXD17TQmoS4kY78Hx
+# Bicepデプロイ（予定）
+az deployment group create \
+  --resource-group rg-rag-poc \
+  --template-file infra/main.bicep
+```
+
+### ローカル実行
+
+```bash
+# RAGパイプラインテスト
+python -m pytest tests/test_rag_pipeline.py -v
+
+# Function Callingテスト
+python -m pytest tests/test_function_calling.py -v
+
+# Web API起動（Day 23-24実装予定）
+uvicorn app.main:app --reload
 ```
 
 ---
 
-## 使用方法
+## 📚 ドキュメント
 
-### 1. Mock Agent（Azure接続不要）
+### 開発ガイド
+- [Function Calling実装ガイド](docs/guides/FUNCTION_CALLING.md)
+- [Azure AI Foundryセットアップ](docs/setup/DAY15_AI_FOUNDRY_SETUP.md)
 
-```bash
-PYTHONPATH=$(pwd) python app/agents/function_calling_agent_mock.py
-```
+### アーキテクチャ設計
+- [システムアーキテクチャ](docs/architecture/ARCHITECTURE.md)
+- [技術選定の判断履歴](docs/architecture/DECISIONS.md)
+- [トレードオフ分析](docs/architecture/TRADEOFFS.md)
 
-### 2. Azure AI Foundry Agent（実環境）
+### 作業記録
+- [セッションサマリー一覧](docs/sessions/)
+  - [Day 15: AI Foundry初期セットアップ](docs/sessions/SESSION_SUMMARY_DAY15.md)
+  - [Day 17-18: Function Calling実装](docs/sessions/SESSION_SUMMARY_DAY17-18.md)
 
-```bash
-PYTHONPATH=$(pwd) python app/agents/foundry_agent_service.py
-```
+---
 
-### 3. pytest実行
+## 🧪 テスト
 
 ```bash
 # 全テスト実行
-PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v
+pytest
 
-# カバレッジ付き
-PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v --cov=app/agents
+# カバレッジレポート
+pytest --cov=app --cov-report=html
+
+# 特定テストのみ
+pytest tests/test_function_calling.py::test_parallel_function_calls -v
 ```
 
 ---
 
-## Function Calling Tools
+## 🛠️ 技術スタック
 
-### 1. search_documents
-
-**用途**: Azure AI Searchでハイブリッド検索（ベクトル + キーワード）
-
-**パラメータ**:
-- `query` (str): 検索クエリ
-- `top_k` (int): 取得件数（デフォルト: 5）
-
-**例**:
-```python
-result = search_documents_impl(query="Azure AI Search", top_k=3)
-```
-
-### 2. calculate
-
-**用途**: 数式評価（セキュリティ制限付き）
-
-**パラメータ**:
-- `expression` (str): 数式（例: `"sqrt(25)"`, `"100 ** 2"`）
-
-**例**:
-```python
-result = calculate_impl(expression="25 * 4")
-# => {"result": 100.0}
-```
-
-### 3. get_current_datetime
-
-**用途**: タイムゾーン対応の日時取得
-
-**パラメータ**:
-- `timezone` (str): タイムゾーン（デフォルト: `"Asia/Tokyo"`）
-- `format` (str): 出力形式（`"japanese"`, `"iso"`, `"unix"`）
-
-**例**:
-```python
-result = get_current_datetime_impl(timezone="America/New_York", format="iso")
-```
-
-### 4. get_equipment_status
-
-**用途**: 工場設備状態確認（MES APIスタブ）
-
-**パラメータ**:
-- `equipment_id` (str): 設備ID
-- `include_history` (bool): 24時間履歴を含めるか
-
-**例**:
-```python
-result = get_equipment_status_impl(equipment_id="LINE-A-01", include_history=True)
-```
+| レイヤー | 技術 |
+|---------|------|
+| **フロントエンド** | FastAPI + Swagger UI（予定） |
+| **バックエンド** | Python 3.11, FastAPI |
+| **AI/ML** | Azure OpenAI (GPT-4o, text-embedding-ada-002) |
+| **検索** | Azure AI Search (Hybrid Search) |
+| **Agent** | Azure AI Foundry Assistants API |
+| **認証** | Azure Managed Identity (RBAC) |
+| **IaC** | Bicep（予定） |
+| **テスト** | pytest, pytest-asyncio |
 
 ---
 
-## ディレクトリ構造
+## 📈 開発ロードマップ
 
-```
-azure-rag-agent-poc/
-├── app/
-│   └── agents/
-│       ├── tools/
-│       │   ├── __init__.py
-│       │   ├── tool_definitions.py      # JSON Schemaツール定義
-│       │   └── implementations.py       # ツール実装
-│       ├── function_calling_agent.py    # 本番用Agent
-│       ├── function_calling_agent_mock.py  # Mock Agent
-│       └── foundry_agent_service.py     # Azure AI Foundry統合
-├── tests/
-│   └── test_function_calling.py         # pytest（27テスト）
-├── notebooks/
-│   └── function_calling_demo.ipynb      # Jupyter検証
-├── docs/
-│   └── FUNCTION_CALLING.md              # 実装ガイド
-├── .env                                 # 環境変数
-├── .env.example                         # 環境変数テンプレート
-├── requirements.txt                     # 依存関係
-└── README.md                            # このファイル
-```
+- [x] **Phase 1**: Azure AI Search RAGパイプライン構築
+- [x] **Phase 2**: Azure AI Foundry環境セットアップ
+- [x] **Phase 3**: Function Calling実装（4ツール）
+- [ ] **Phase 4**: FastAPI Web化（Day 23-24）
+- [ ] **Phase 5**: Code Interpreter統合（Day 19-20）
+- [ ] **Phase 6**: File Search統合（Day 21-22）
+- [ ] **Phase 7**: 本番環境デプロイ
 
 ---
 
-## テスト結果
+## 🤝 貢献
 
-```bash
-$ PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v
+プロジェクトへの貢献を歓迎します。
 
-============================== 27 passed in 0.33s ==============================
-
-Test Coverage:
-  ✅ Tool Definitions: 4/4 tests
-  ✅ Calculator Tool: 7/7 tests
-  ✅ DateTime Tool: 6/6 tests
-  ✅ Equipment Status Tool: 5/5 tests
-  ✅ Mock Agent: 4/4 tests
-  ✅ Integration: 1/1 test
-```
+1. Fork this repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
 ---
 
-## Azure リソース
+## 📄 ライセンス
 
-| リソース | 名前 | 用途 |
-|---------|------|------|
-| Resource Group | `rg-rag-poc` | リソースコンテナ |
-| AI Foundry Hub | `ai-hub-dev-ldt4idhueffoe` | AI開発環境 |
-| AI Foundry Project | `rag-agent-project` | プロジェクト管理 |
-| Azure OpenAI | `oai-ragpoc-dev-ldt4idhueffoe` | LLM/Embedding |
-| Azure AI Search | `search-ragpoc-dev-ldt4idhueffoe` | ハイブリッド検索 |
-| Assistant | `asst_szAH6GUpXD17TQmoS4kY78Hx` | Function Calling Agent |
+MIT License - 詳細は [LICENSE](LICENSE) を参照。
 
 ---
 
-## 開発履歴
+## 📞 連絡先
 
-### Day 17-18: Function Calling実装（2025-12-22）
-
-**実装内容**:
-- ✅ 4ツール定義（JSON Schema準拠）
-- ✅ Mock Agent実装（検証用）
-- ✅ Azure AI Foundry Agent実装
-- ✅ pytest 27テスト（100% PASS）
-- ✅ 並列Function Calling検証
-- ✅ RBAC権限設定（Azure AI Developer）
-
-**所要時間**: 4時間
-
-**主要課題**:
-1. RBAC権限エラー → `Azure AI Developer`ロール割り当てで解決
-2. Azure Portal UI制限 → Python SDK直接実装で回避
-3. Assistants API deprecation warning → 動作確認済み、将来移行予定
+**プロジェクト責任者**: Ryo Nakamizo  
+**組織**: 日野コンピューターシステム株式会社  
+**メール**: [your-email@example.com]
 
 ---
 
-## 次のステップ
-
-- [ ] Code Interpreter統合
-- [ ] File Search統合
-- [ ] ストリーミング応答実装
-- [ ] FastAPI Webアプリ化
-- [ ] 実MES API統合（設備状態ツール）
-- [ ] Application Insights統合
-
----
-
-## ライセンス
-
-MIT License
-
----
-
-## 参考リソース
+## 🙏 謝辞
 
 - [Azure AI Foundry Documentation](https://learn.microsoft.com/azure/ai-studio/)
 - [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)
-- [Azure AI Search](https://learn.microsoft.com/azure/search/)
-- [Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
+- [FastAPI Framework](https://fastapi.tiangolo.com/)
