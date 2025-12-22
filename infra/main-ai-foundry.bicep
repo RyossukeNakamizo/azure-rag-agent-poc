@@ -10,6 +10,9 @@ param openAIAccountName string
 @description('Azure AI Search service name')
 param searchServiceName string
 
+@description('Location for all resources')
+param location string = resourceGroup().location
+
 // 既存リソース参照
 resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = {
   name: openAIAccountName
@@ -54,3 +57,23 @@ output projectName string = existingProject.name
 output hubPrincipalId string = existingHub.identity.principalId
 output openAIConnectionName string = connections.outputs.openAIConnectionName
 output searchConnectionName string = connections.outputs.searchConnectionName
+
+// ================================================================
+// Azure AI Search Index Module
+// ================================================================
+module searchIndex 'modules/search/index.bicep' = {
+  name: 'searchIndexDeployment'
+  params: {
+    searchServiceName: searchServiceName
+    indexName: 'rag-docs-index'
+  }
+  dependsOn: [
+    searchService
+  ]
+}
+
+// ================================================================
+// Outputs - Index情報追加
+// ================================================================
+output searchIndexName string = searchIndex.outputs.indexName
+output searchServiceEndpoint string = searchIndex.outputs.searchServiceEndpoint

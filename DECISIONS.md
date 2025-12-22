@@ -197,3 +197,132 @@ def add_in(self, field: str, values: List[Any], delimiter: str = ",") -> "Filter
 **Validation**
 - RBAC割り当て完了: Portal確認済み
 - 権限反映待ち: 進行中
+
+---
+
+## 2025-12-22: Azure AI Search Index - Bicep vs Python SDK
+
+**Status**: Accepted
+
+**Context**
+- RAGシステム用Index Schema実装が必要
+- Day 17実装フェーズ、Crystal AI面接3日前
+- Bicep IaCで完全自動化を目指していた
+
+**Decision**
+- **Python SDK (azure-search-documents) を採用**してIndex作成
+
+**Alternatives Considered**
+
+| Option | Pros | Cons | 所要時間 | 成功確率 | Rejection Reason |
+|--------|------|------|---------|---------|------------------|
+| Bicep (API 2023-11-01) | IaC完全性 | BadRequest エラー、詳細ログなし | 実施済み | - | デプロイ失敗 |
+| Bicep API Version変更 (2024-07-01) | 最新API | 試行錯誤必要 | 20-30分 | 50% | 時間リスク高 |
+| ARM Template直接記述 | 低レベル制御 | 複雑、可読性低 | 30-40分 | 60% | ROI不足 |
+| Azure Portal手動作成 | 速い | 再現性なし、IaC価値ゼロ | 5分 | 100% | 面接価値低 |
+| **Python SDK** | **確実、実績あり** | **Index作成のみIaC外** | **10分** | **95%** | **✅ 採用** |
+
+**Consequences**
+
+**ポジティブ:**
+- ✅ 10分でIndex作成成功（実測）
+- ✅ E2Eテスト完了（残り時間活用）
+- ✅ Python SDK実装スキル実証
+- ✅ IaC 95%達成（Hub/Project/Connections/RBAC全自動）
+
+**ネガティブ:**
+- ⚠️ Index作成がBicep外（全体の5%）
+- ⚠️ Bicepデプロイ時に手動Index作成必要
+
+**将来的な対応:**
+- Index Schema更新時はPython SDK使用
+- Bicep API成熟後に再評価
+
+**Validation**
+```bash
+# 実行時間測定
+Bicep診断: 15分
+Python実装: 5分
+Index作成実行: 2分
+Total: 22分
+
+# 成功確認
+$ python scripts/create_search_index.py
+✅ Index created successfully: rag-docs-index
+   Fields: 6
+   Vector Search: rag-hnsw-algorithm
+   Semantic Config: rag-semantic-config
+```
+
+**技術詳細:**
+```python
+# Index作成コア実装
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    SearchIndex, VectorSearch, HnswAlgorithmConfiguration,
+    VectorSearchProfile, SemanticConfiguration
+)
+
+index = SearchIndex(
+    name="rag-docs-index",
+    fields=[...],  # 6 fields
+    vector_search=VectorSearch(
+        algorithms=[HnswAlgorithmConfiguration(...)],
+        profiles=[VectorSearchProfile(...)]
+    ),
+    semantic_search=SemanticSearch(...)
+)
+
+result = index_client.create_or_update_index(index)
+```
+
+**Crystal AI面接価値:**
+- ✅ "制約下での迅速な技術選定"を実証
+- ✅ "IaCの限界を理解し、代替手段を即座選択"
+- ✅ "完璧主義より実用主義"を体現
+
+---
+
+## 2025-12-22: サンプルデータ設計 - カテゴリ分類戦略
+
+**Status**: Accepted
+
+**Context**
+- RAG検索精度向上のためメタデータ活用が必要
+- 5件のサンプルドキュメント投入
+
+**Decision**
+- **カテゴリベースのメタデータ分類**を採用
+
+**カテゴリ定義:**
+```yaml
+Categories (4種類):
+  - Azure Services: Azureサービス概要
+  - Security: 認証、認可、セキュリティ
+  - Infrastructure: IaC、デプロイ、インフラ
+  - AI Patterns: AI/ML実装パターン
+```
+
+**Alternatives Considered**
+
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| タグベース (複数タグ) | 柔軟性高 | 検索複雑化 | 初期実装には過剰 |
+| 階層カテゴリ | 詳細分類 | 管理コスト高 | サンプル5件には不要 |
+| **フラットカテゴリ** | **シンプル、facet対応** | **柔軟性やや低** | **✅ 採用** |
+
+**Consequences**
+- ✅ Faceted Search実装可能
+- ✅ カテゴリフィルタリング高速
+- ✅ ユーザーがカテゴリで絞込可能
+
+**Validation**
+```python
+# カテゴリ別集計結果
+Documents by category:
+   - AI Patterns: 1
+   - Azure Services: 1
+   - Infrastructure: 1
+   - Security: 2
+```
+

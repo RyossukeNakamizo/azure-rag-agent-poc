@@ -35,3 +35,11 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Bicep backup files
+*.backup
+*.bak
+
+# Bicep build outputs
+*.json
+!infra/parameters/*.json
