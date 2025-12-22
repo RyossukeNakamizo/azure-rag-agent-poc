@@ -1,293 +1,273 @@
-# Azure RAG Agent PoC
+# Azure RAG Agent POC
 
-Production-ready RAG (Retrieval-Augmented Generation) pipeline using Azure AI Search and Azure OpenAI.
+RAG (Retrieval-Augmented Generation) システムの概念実証プロジェクト。
+Azure AI Foundry Agents with Function Calling実装。
 
-## Architecture
+---
+
+## プロジェクト概要
+
+工場向けAIアシスタントの構築を目的とした、Azure AI FoundryベースのエンタープライズグレードRAGシステム。
+
+**主要機能**：
+- ✅ Function Calling（4ツール実装）
+- ✅ Hybrid Search（Azure AI Search）
+- ✅ Azure OpenAI統合（gpt-4o、text-embedding-ada-002）
+- ✅ Managed Identity認証
+- ✅ pytest完全カバレッジ（27テスト）
+
+---
+
+## アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        RAG Pipeline                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  User Query                                                      │
-│      │                                                           │
-│      ▼                                                           │
-│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐ │
-│  │ Embedding   │───▶│ Azure AI Search  │───▶│ Top-K Retrieval │ │
-│  │ (ada-002)   │    │ (Hybrid Search)  │    │ + Reranking     │ │
-│  └─────────────┘    └──────────────────┘    └────────┬────────┘ │
-│                                                       │          │
-│                                                       ▼          │
-│                                              ┌────────────────┐  │
-│                                              │ Context Builder│  │
-│                                              └───────┬────────┘  │
-│                                                      │           │
-│                                                      ▼           │
-│                                              ┌────────────────┐  │
-│                                              │ Azure OpenAI   │  │
-│                                              │ GPT-4 (Stream) │  │
-│                                              └───────┬────────┘  │
-│                                                      │           │
-│                                                      ▼           │
-│                                              ┌────────────────┐  │
-│                                              │   Response     │  │
-│                                              │  (+ Sources)   │  │
-│                                              └────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+User Query
+    │
+    ▼
+Azure AI Foundry Agent (Assistants API)
+    │
+    ├─▶ Function Calling Tools
+    │   ├─ search_documents (Azure AI Search)
+    │   ├─ calculate (Math evaluation)
+    │   ├─ get_current_datetime (Timezone-aware)
+    │   └─ get_equipment_status (Factory MES stub)
+    │
+    ▼
+Azure OpenAI (gpt-4o)
+    │
+    ▼
+Structured Response
 ```
 
-## Features
+---
 
-- **Hybrid Search**: Combined vector + keyword search for optimal retrieval
-- **Streaming Response**: Real-time response generation with SSE
-- **Multi-turn Conversation**: Session-based conversation history
-- **Token-aware Chunking**: Semantic chunking with overlap for context preservation
-- **Production Security**: Managed Identity authentication, RBAC authorization
-- **IaC Ready**: Complete Bicep templates for Azure deployment
+## セットアップ
 
-## Quick Start
+### 前提条件
 
-### Prerequisites
+- Python 3.11+
+- Azure Subscription
+- Azure CLI認証済み（`az login`）
 
-- Python 3.10+
-- Azure CLI installed and authenticated (`az login`)
-- Azure subscription with required resource providers registered
-
-### 1. Clone and Setup
+### インストール
 
 ```bash
-git clone <repository-url>
+# リポジトリクローン
+git clone https://github.com/RyossukeNakamizo/azure-rag-agent-poc.git
 cd azure-rag-agent-poc
 
-# Create virtual environment
+# 仮想環境作成
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Install dependencies
+# 依存関係インストール
 pip install -r requirements.txt
-```
 
-### 2. Deploy Azure Infrastructure
-
-```bash
-# Create resource group
-az group create --name rg-rag-poc --location japaneast
-
-# Deploy infrastructure
-az deployment group create \
-  --resource-group rg-rag-poc \
-  --template-file infra/main.bicep \
-  --parameters environment=dev projectName=ragpoc
-
-# Get outputs
-az deployment group show \
-  --resource-group rg-rag-poc \
-  --name main \
-  --query properties.outputs
-```
-
-### 3. Configure Environment
-
-```bash
-# Copy environment template
+# 環境変数設定
 cp .env.example .env
-
-# Edit .env with your Azure resource values
-# (Use outputs from deployment)
+# .envを編集してAzureリソース情報を設定
 ```
 
-### 4. Create Search Index
-
-```python
-from src.indexer import SearchIndexManager
-
-# Create index with vector search
-manager = SearchIndexManager()
-index = manager.create_index()
-print(f"Index '{index.name}' created")
-```
-
-### 5. Ingest Documents
-
-```python
-from src.indexer import DocumentIngestionPipeline
-
-pipeline = DocumentIngestionPipeline()
-
-# Ingest from list
-documents = [
-    {
-        "id": "doc-001",
-        "content": "Azure AI Search provides enterprise search...",
-        "metadata": {
-            "source": "azure-docs/ai-search.md",
-            "category": "azure",
-            "title": "Azure AI Search Overview"
-        }
-    }
-]
-result = pipeline.ingest_documents(documents)
-print(f"Ingested: {result['succeeded']} documents")
-
-# Or ingest from Blob Storage
-result = pipeline.ingest_from_blob(prefix="docs/")
-```
-
-### 6. Run RAG Queries
-
-```python
-from src.rag_pipeline import RAGPipeline
-
-pipeline = RAGPipeline()
-
-# Non-streaming query
-response = pipeline.query(
-    question="Azure AI Searchでセマンティック検索を有効化する方法は？",
-    top_k=5,
-    search_mode="hybrid"
-)
-
-print(response.answer)
-print("Sources:", response.sources)
-
-# Streaming query
-for chunk in pipeline.query(question="...", stream=True):
-    print(chunk, end="", flush=True)
-```
-
-### 7. Start API Server
+### 環境変数（.env）
 
 ```bash
-# Development
-uvicorn src.api:app --reload --host 0.0.0.0 --port 8000
+# Azure AI Search
+AZURE_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+AZURE_SEARCH_INDEX=rag-docs-index
 
-# Production
-uvicorn src.api:app --host 0.0.0.0 --port 8000 --workers 4
+# Azure OpenAI
+AZURE_OPENAI_ENDPOINT=https://<openai-resource>.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_CHAT=gpt-4o
+AZURE_OPENAI_DEPLOYMENT_EMBEDDING=text-embedding-ada-002
+AZURE_OPENAI_API_VERSION=2024-10-01-preview
+
+# Azure AI Foundry Assistant
+AZURE_ASSISTANT_ID=asst_szAH6GUpXD17TQmoS4kY78Hx
 ```
 
-## API Endpoints
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/query` | POST | Execute RAG query |
-| `/query/stream` | POST | Execute RAG query (streaming) |
-| `/ingest` | POST | Ingest documents |
-| `/index/create` | POST | Create/update search index |
-| `/conversation/{id}` | DELETE | Clear conversation history |
+## 使用方法
 
-### Example API Call
+### 1. Mock Agent（Azure接続不要）
 
 ```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Azure AI Searchの料金体系は？",
-    "top_k": 5,
-    "search_mode": "hybrid"
-  }'
+PYTHONPATH=$(pwd) python app/agents/function_calling_agent_mock.py
 ```
 
-## Project Structure
+### 2. Azure AI Foundry Agent（実環境）
+
+```bash
+PYTHONPATH=$(pwd) python app/agents/foundry_agent_service.py
+```
+
+### 3. pytest実行
+
+```bash
+# 全テスト実行
+PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v
+
+# カバレッジ付き
+PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v --cov=app/agents
+```
+
+---
+
+## Function Calling Tools
+
+### 1. search_documents
+
+**用途**: Azure AI Searchでハイブリッド検索（ベクトル + キーワード）
+
+**パラメータ**:
+- `query` (str): 検索クエリ
+- `top_k` (int): 取得件数（デフォルト: 5）
+
+**例**:
+```python
+result = search_documents_impl(query="Azure AI Search", top_k=3)
+```
+
+### 2. calculate
+
+**用途**: 数式評価（セキュリティ制限付き）
+
+**パラメータ**:
+- `expression` (str): 数式（例: `"sqrt(25)"`, `"100 ** 2"`）
+
+**例**:
+```python
+result = calculate_impl(expression="25 * 4")
+# => {"result": 100.0}
+```
+
+### 3. get_current_datetime
+
+**用途**: タイムゾーン対応の日時取得
+
+**パラメータ**:
+- `timezone` (str): タイムゾーン（デフォルト: `"Asia/Tokyo"`）
+- `format` (str): 出力形式（`"japanese"`, `"iso"`, `"unix"`）
+
+**例**:
+```python
+result = get_current_datetime_impl(timezone="America/New_York", format="iso")
+```
+
+### 4. get_equipment_status
+
+**用途**: 工場設備状態確認（MES APIスタブ）
+
+**パラメータ**:
+- `equipment_id` (str): 設備ID
+- `include_history` (bool): 24時間履歴を含めるか
+
+**例**:
+```python
+result = get_equipment_status_impl(equipment_id="LINE-A-01", include_history=True)
+```
+
+---
+
+## ディレクトリ構造
 
 ```
 azure-rag-agent-poc/
-├── src/
-│   ├── __init__.py
-│   ├── config.py              # Environment configuration
-│   ├── embedding.py           # Text chunking & embedding
-│   ├── indexer.py             # Index management & ingestion
-│   ├── retriever.py           # Hybrid search retrieval
-│   ├── rag_pipeline.py        # Core RAG orchestration
-│   └── api.py                 # FastAPI endpoints
+├── app/
+│   └── agents/
+│       ├── tools/
+│       │   ├── __init__.py
+│       │   ├── tool_definitions.py      # JSON Schemaツール定義
+│       │   └── implementations.py       # ツール実装
+│       ├── function_calling_agent.py    # 本番用Agent
+│       ├── function_calling_agent_mock.py  # Mock Agent
+│       └── foundry_agent_service.py     # Azure AI Foundry統合
 ├── tests/
-│   └── test_rag_pipeline.py
-├── infra/
-│   └── main.bicep             # Azure IaC
-├── .env.example
-├── requirements.txt
-└── README.md
+│   └── test_function_calling.py         # pytest（27テスト）
+├── notebooks/
+│   └── function_calling_demo.ipynb      # Jupyter検証
+├── docs/
+│   └── FUNCTION_CALLING.md              # 実装ガイド
+├── .env                                 # 環境変数
+├── .env.example                         # 環境変数テンプレート
+├── requirements.txt                     # 依存関係
+└── README.md                            # このファイル
 ```
 
-## Configuration
+---
 
-### Environment Variables
+## テスト結果
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `AZURE_SEARCH_ENDPOINT` | AI Search service endpoint | Yes |
-| `AZURE_SEARCH_INDEX` | Index name | Yes |
-| `AZURE_OPENAI_ENDPOINT` | OpenAI service endpoint | Yes |
-| `AZURE_OPENAI_DEPLOYMENT_CHAT` | Chat model deployment name | Yes |
-| `AZURE_OPENAI_DEPLOYMENT_EMBEDDING` | Embedding model deployment | Yes |
-| `AZURE_AUTH_METHOD` | Authentication method | No (default: azure_cli) |
-| `RAG_TOP_K` | Number of results to retrieve | No (default: 5) |
-| `CHUNK_SIZE` | Token size per chunk | No (default: 500) |
+```bash
+$ PYTHONPATH=$(pwd) pytest tests/test_function_calling.py -v
 
-### Authentication Methods
+============================== 27 passed in 0.33s ==============================
 
-1. **Managed Identity** (Production): Set `AZURE_AUTH_METHOD=managed_identity`
-2. **Azure CLI** (Development): Set `AZURE_AUTH_METHOD=azure_cli`, run `az login`
-3. **Service Principal** (CI/CD): Set credentials via environment variables
-
-## Performance Tuning
-
-### Chunking Strategy
-
-```python
-# Adjust in .env or config
-CHUNK_SIZE=500      # Tokens per chunk
-CHUNK_OVERLAP=100   # Overlap between chunks
+Test Coverage:
+  ✅ Tool Definitions: 4/4 tests
+  ✅ Calculator Tool: 7/7 tests
+  ✅ DateTime Tool: 6/6 tests
+  ✅ Equipment Status Tool: 5/5 tests
+  ✅ Mock Agent: 4/4 tests
+  ✅ Integration: 1/1 test
 ```
 
-- Larger chunks: Better context, fewer retrievals needed
-- Smaller chunks: More precise matching, may lose context
+---
 
-### Search Configuration
+## Azure リソース
 
-```python
-# In retriever.py - HNSW parameters
-"m": 4,               # Graph connectivity (higher = more accurate, slower)
-"efConstruction": 400, # Index build quality
-"efSearch": 500        # Query-time quality
-```
+| リソース | 名前 | 用途 |
+|---------|------|------|
+| Resource Group | `rg-rag-poc` | リソースコンテナ |
+| AI Foundry Hub | `ai-hub-dev-ldt4idhueffoe` | AI開発環境 |
+| AI Foundry Project | `rag-agent-project` | プロジェクト管理 |
+| Azure OpenAI | `oai-ragpoc-dev-ldt4idhueffoe` | LLM/Embedding |
+| Azure AI Search | `search-ragpoc-dev-ldt4idhueffoe` | ハイブリッド検索 |
+| Assistant | `asst_szAH6GUpXD17TQmoS4kY78Hx` | Function Calling Agent |
 
-### Recommended Settings by Use Case
+---
 
-| Use Case | Chunk Size | Top-K | Search Mode |
-|----------|------------|-------|-------------|
-| Q&A | 500 | 3-5 | hybrid |
-| Document Summary | 1000 | 5-10 | vector |
-| Code Search | 300 | 5 | keyword |
+## 開発履歴
 
-## Comparison: Azure AI Search vs Pinecone
+### Day 17-18: Function Calling実装（2025-12-22）
 
-| Feature | Azure AI Search | Pinecone |
-|---------|-----------------|----------|
-| Managed Service | ✅ | ✅ |
-| Hybrid Search | ✅ Native | ❌ Requires workaround |
-| Semantic Reranking | ✅ Built-in | ❌ External |
-| Japanese Analyzer | ✅ ja.lucene | Limited |
-| RBAC Integration | ✅ Azure AD | API Key only |
-| Private Endpoint | ✅ | ✅ |
-| Skillset (AI Pipeline) | ✅ | ❌ |
-| Cost Model | Per-service | Per-vector |
+**実装内容**:
+- ✅ 4ツール定義（JSON Schema準拠）
+- ✅ Mock Agent実装（検証用）
+- ✅ Azure AI Foundry Agent実装
+- ✅ pytest 27テスト（100% PASS）
+- ✅ 並列Function Calling検証
+- ✅ RBAC権限設定（Azure AI Developer）
 
-**Recommendation**: Azure AI Search for enterprise Azure workloads with hybrid search requirements; Pinecone for simple vector-only use cases or multi-cloud deployments.
+**所要時間**: 4時間
 
-## Next Steps
+**主要課題**:
+1. RBAC権限エラー → `Azure AI Developer`ロール割り当てで解決
+2. Azure Portal UI制限 → Python SDK直接実装で回避
+3. Assistants API deprecation warning → 動作確認済み、将来移行予定
 
-1. **Step 2**: Add LangChain Agent integration with Tools (Calculator, SQL, Custom)
-2. **Step 3**: Implement evaluation framework (RAGAS, custom metrics)
-3. **Step 4**: Production deployment with Container Apps
+---
 
-## License
+## 次のステップ
 
-MIT
+- [ ] Code Interpreter統合
+- [ ] File Search統合
+- [ ] ストリーミング応答実装
+- [ ] FastAPI Webアプリ化
+- [ ] 実MES API統合（設備状態ツール）
+- [ ] Application Insights統合
 
-## References
+---
 
-- [Azure AI Search Documentation](https://learn.microsoft.com/en-us/azure/search/)
-- [Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [RAG Pattern Overview](https://learn.microsoft.com/en-us/azure/search/retrieval-augmented-generation-overview)
+## ライセンス
+
+MIT License
+
+---
+
+## 参考リソース
+
+- [Azure AI Foundry Documentation](https://learn.microsoft.com/azure/ai-studio/)
+- [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)
+- [Azure AI Search](https://learn.microsoft.com/azure/search/)
+- [Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
