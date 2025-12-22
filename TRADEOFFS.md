@@ -1,196 +1,156 @@
-### Simple str() Implementation (Option B)
+# Tradeoff Analysis
 
-**Category**: Implementation Pattern
-
-**Considered For**: OData search.in filter encoding
-
-**Original Approach (Pre-fix)**
-```python
-def add_in(self, field: str, values: List[Any]) -> "FilterBuilder":
-    """Add an OData search.in filter for multi-value matching."""
-    if not values:
-        logger.warning("empty_values_for_in_filter", field=field)
-        return self
-    
-    self._validate_field_name(field)
-    # Simple str() concatenation (REJECTED)
-    str_values = [str(v) for v in values]
-    values_str = ",".join(str_values)
-    self.filters.append(f"search.in({field}, '{values_str}', ',')")
-    return self
-```
-
-**Rejection Factors**
-| Factor | Weight | Score | Notes |
-|--------|--------|-------|-------|
-| Type Safety | High | 1/5 | datetime → broken ISO format, bool → "True"/"False" |
-| Security | High | 1/5 | No single quote escaping (injection risk) |
-| Testability | Medium | 2/5 | Encoding logic coupled with filter construction |
-| Maintainability | High | 2/5 | Adding new types requires modifying add_in() |
-| Documentation | Low | 3/5 | No clear guidance on supported types |
-| Performance | Low | 5/5 | Slightly faster (~5μs/call) than Option A |
-| Simplicity | Medium | 5/5 | Only 5 lines of code |
-
-**Detailed Analysis**
-
-1. **Type Safety Issues** (Critical)
-   ```python
-   # datetime handling (BROKEN)
-   from datetime import datetime
-   dt = datetime(2024, 12, 18, 15, 0, 0)
-   str(dt)  # → "2024-12-18 15:00:00" (missing 'Z', wrong format)
-   # Expected: "2024-12-18T15:00:00Z"
-   
-   # bool handling (BROKEN)
-   str(True)   # → "True" (Python capitalization)
-   str(False)  # → "False"
-   # Expected: "true", "false" (OData lowercase)
-   
-   # None handling (SILENT FAILURE)
-   str(None)  # → "None" (string literal, not null)
-   # Expected: Raise ValueError or skip
-   ```
-
-2. **Security Vulnerabilities** (Critical)
-   ```python
-   # Single quote injection
-   values = ["O'Reilly", "McDonald's"]
-   result = ",".join([str(v) for v in values])
-   # → search.in(field, 'O'Reilly,McDonald's', ',')
-   #                       ^ unescaped quote breaks syntax
-   
-   # Correct (Option A):
-   # → search.in(field, 'O''Reilly,McDonald''s', ',')
-   ```
-
-3. **Testability Issues** (Medium)
-   - Encoding logic embedded in `add_in()` method
-   - Cannot unit test encoding without full FilterBuilder instantiation
-   - Mocking becomes complex for edge case testing
-
-4. **Maintainability Issues** (High)
-   - Adding support for new types (e.g., UUID, Decimal) requires:
-     1. Modifying `add_in()` directly (violates SRP)
-     2. Increasing cyclomatic complexity
-     3. Risk of regression bugs in existing logic
-
-**Final Verdict**: 
-Rejected due to **critical type safety and security failures**. While simpler, it fails enterprise-grade requirements and creates technical debt that would require future refactoring.
-
-**Revisit Trigger**
-- **Prototype/Demo Use Cases**: If building a quick proof-of-concept where:
-  - Only string values are used
-  - No user input (no injection risk)
-  - Short lifespan (<1 week)
-  - Not production-bound
-
-- **Performance-Critical Path**: If profiling reveals encoding is a bottleneck (unlikely):
-  - Current overhead: ~5μs per call
-  - Would need >1000 calls/request to matter
-  - Optimization should target algorithm, not implementation
-
-**Comparison Summary**
-
-| Aspect | Option A (Selected) | Option B (Rejected) |
-|--------|---------------------|---------------------|
-| Lines of Code | ~65 | ~10 |
-| Type Safety | ✅ Full | ❌ None |
-| Security | ✅ Escaping | ❌ Vulnerable |
-| Testability | ✅ Isolated | ⚠️ Coupled |
-| Performance | 100μs | 95μs |
-| Enterprise Ready | ✅ Yes | ❌ No |
-
-**Historical Context**
-- **Original Implementation**: Option B (simple str())
-- **Bug Discovery**: Cursor Bot review (2024-12-18)
-- **Fix Timeline**: 30 minutes of analysis → 2 hours implementation
-- **Decision Process**: Documented in DECISIONS.md#2024-12-18
-
-**Related Decisions**
-- DECISIONS.md: "2024-12-18: OData search.in Encoding Strategy"
-- ARCHITECTURE.md: "Security First" principle (Managed Identity priority)
-
-**References**
-- [Azure AI Search OData Filter Syntax](https://learn.microsoft.com/en-us/azure/search/query-odata-filter-orderby-syntax)
-- [Python str() Gotchas](https://docs.python.org/3/library/stdtypes.html#str)
-- [OWASP Injection Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html)
+> 却下した選択肢の詳細分析
 
 ---
 
-### .bicepparam形式
+## Azure AI Projects SDK Assistants API
 
-**Category**: Configuration Format
+**Category**: API Pattern
 
-**Considered For**: Bicepパラメータファイル形式
+**Considered For**: Azure AI Foundry Agent 統合
 
 **Rejection Factors**
+
 | Factor | Weight | Score | Notes |
 |--------|--------|-------|-------|
-| Azure CLI互換性 | High | 2/5 | `using`構文エラー継続、解決不能 |
-| 開発効率 | High | 1/5 | トラブルシューティングに45分消費 |
-| 安定性 | High | 2/5 | 本番環境で未検証、リスク高 |
-| 型安全性 | Medium | 5/5 | 理論上は優位だが実用不可 |
+| Availability | High | 0/5 | API 完全廃止（530 エラー） |
+| Documentation | Medium | 1/5 | DeprecationWarning のみ |
+| Migration Path | High | 0/5 | Responses API 実装方法不明 |
+| Production Ready | High | 0/5 | 技術的に使用不可能 |
 
-**Final Verdict**: JSON形式が確実性・互換性・実績で圧倒的優位
+**Final Verdict**: Azure 側で API 廃止済み、技術的に使用不可能
+
+**Revisit Trigger**: Azure が Responses API の実装ガイドを公開した場合
+
+---
+
+## Azure AI Projects SDK Responses API
+
+**Category**: API Pattern
+
+**Considered For**: Assistants API の代替
+
+**Rejection Factors**
+
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Documentation | High | 0/5 | 実装例・ガイドなし |
+| SDK Support | High | 1/5 | メソッド存在不明 |
+| Community | Medium | 0/5 | Stack Overflow に情報なし |
+| Time to Implement | High | 0/5 | 調査に3時間費やすも実装方法特定できず |
+
+**Final Verdict**: ドキュメント・実装例が完全に不足、実装不可能
+
+**Revisit Trigger**: Azure が公式実装ガイド・サンプルコードを公開した場合
+
+---
+
+## Azure AI Projects SDK Connections
+
+**Category**: Integration Pattern
+
+**Considered For**: Azure OpenAI 接続情報の取得
+
+**Rejection Factors**
+
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Authentication | High | 1/5 | "Unknown authentication type" エラー |
+| Reliability | High | 1/5 | `client.inference.get_azure_openai_client()` 失敗 |
+| Debugging | Medium | 1/5 | エラーメッセージが不明瞭 |
+| Workaround | High | 0/5 | 回避方法が存在しない |
+
+**Final Verdict**: 認証エラー解決不可、直接統合の方が確実
+
+**Revisit Trigger**: azure-ai-projects SDK の安定版リリース（1.0.0 GA）
+
+---
+
+## LangChain
+
+**Category**: Framework
+
+**Considered For**: RAG オーケストレーション（将来）
+
+**Rejection Factors**
+
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Abstraction | High | 2/5 | 過度な抽象化でデバッグ困難 |
+| Stability | High | 2/5 | 頻繁な破壊的変更 |
+| Azure Integration | Medium | 3/5 | 公式 SDK の方が安定 |
+| Dependency Weight | Medium | 2/5 | 依存関係が重い |
+
+**Final Verdict**: 現時点では Azure 公式 SDK で十分、複雑度に見合う価値なし
 
 **Revisit Trigger**: 
-- Azure CLI 2.60.0+で.bicepparam完全サポート確認
-- Microsoft公式ドキュメントで本番推奨時
+- 複数 LLM プロバイダー対応が必要になった場合
+- 複雑なマルチエージェントシステム実装時
 
 ---
 
-### 全リソース削除して再作成
+## API Key Authentication
 
-**Category**: Deployment Strategy
+**Category**: Security Pattern
 
-**Considered For**: RBAC重複エラー解決方法
+**Considered For**: Azure サービス認証
 
 **Rejection Factors**
+
 | Factor | Weight | Score | Notes |
 |--------|--------|-------|-------|
-| データ保護 | High | 1/5 | Hub/Projectメタデータ喪失リスク |
-| 実装時間 | Medium | 2/5 | 再作成に10-15分必要 |
-| 運用リスク | High | 1/5 | 本番環境で同様の操作は危険 |
+| Security | High | 1/5 | キー漏洩リスク |
+| Rotation | High | 2/5 | 手動ローテーション必要 |
+| Auditability | Medium | 2/5 | アクセス追跡困難 |
+| Enterprise Grade | High | 1/5 | エンタープライズ非推奨 |
 
-**Final Verdict**: 既存リソース参照アプローチでリスク回避
+**Final Verdict**: Managed Identity でキーレス認証を実現、セキュリティ要件達成
 
-**Revisit Trigger**: 完全にクリーンな環境が必要な場合のみ
+**Revisit Trigger**: ローカル開発環境での限定使用のみ（本番では絶対に使用しない）
 
 ---
 
-### API Key認証
+## Semantic Ranker (Azure AI Search)
 
-**Category**: Authentication Method
+**Category**: Service Feature
 
-**Considered For**: Azure AI Search Connection認証
+**Considered For**: 検索精度向上（将来）
 
 **Rejection Factors**
+
 | Factor | Weight | Score | Notes |
 |--------|--------|-------|-------|
-| セキュリティ | High | 1/5 | キー漏洩リスク、ローテーション負荷 |
-| 監査性 | High | 2/5 | アクセス追跡困難 |
-| ベストプラクティス | High | 1/5 | Microsoftが非推奨 |
-| 即効性 | Low | 5/5 | 唯一の利点だが不十分 |
+| Cost | High | 2/5 | 追加課金が発生 |
+| Latency | Medium | 3/5 | +200ms 程度 |
+| Value | Medium | 3/5 | ハイブリッド検索で十分（仮説） |
+| Implementation Phase | High | N/A | RAG 未実装のため評価不可 |
 
-**Final Verdict**: Managed Identity認証で最大10分待機する価値あり
+**Final Verdict**: RAG 実装後に精度評価してから判断
 
-**Revisit Trigger**: ローカル開発環境での一時使用のみ
+**Revisit Trigger**: 
+- RAG 実装完了後
+- ハイブリッド検索の精度が不足していることが判明した場合
 
 ---
 
-### インデックス即座作成（Day 15内完了）
+## Exhaustive KNN (Vector Search)
 
-**Category**: Implementation Scope
+**Category**: Algorithm
 
-**Considered For**: Azure AI Search Index作成タイミング
+**Considered For**: ベクトル検索アルゴリズム（将来）
 
 **Rejection Factors**
+
 | Factor | Weight | Score | Notes |
 |--------|--------|-------|-------|
-| 複雑性 | High | 2/5 | Schema設計、データ準備で30-60分必要 |
-| Day 15目標達成 | High | 3/5 | Hub/Project/Connections完了で十分 |
-| 段階的実装 | Medium | 5/5 | Day 16で集中実施の方が効率的 |
+| Latency | High | 1/5 | 10万件で3秒超 |
+| Accuracy | Low | 5/5 | 完全精度だが過剰 |
+| Scalability | High | 1/5 | データ量に比例して劣化 |
+| Cost | Medium | 2/5 | 計算コスト高 |
 
-**Final Verdict**: Day 16でIndex作成に集中する方が品質向上
+**Final Verdict**: 大規模データでレイテンシが許容不可、HNSW で十分
 
-**Revisit Trigger**: なし（適切な判断）
+**Revisit Trigger**: 
+- データ件数 1万件以下
+- 精度最優先の要件が発生した場合

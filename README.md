@@ -1,195 +1,184 @@
 # Azure RAG Agent POC
 
-> 工場向けAzure AI Foundry RAG/Agentシステムの実証実験プロジェクト
+Azure AI Foundry + Azure OpenAI による RAG (Retrieval-Augmented Generation) システムの PoC 実装
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
-[![Azure AI](https://img.shields.io/badge/Azure-AI%20Foundry-0078D4.svg)](https://azure.microsoft.com/products/ai-services/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## 🎯 実装状況
 
----
+### ✅ Phase 1: Chat Completions API（完了）
 
-## 📋 プロジェクト概要
+- **FastAPI サーバー**: 完全稼働
+- **Azure OpenAI 統合**: 直接統合（Managed Identity 認証）
+- **Chat API**: ストリーミング・非ストリーミング両対応
+- **エンドポイント**: Health, Tools, Chat
 
-日野コンピューターシステム株式会社の工場向けWebアプリケーション開発プロジェクト。Azure AI Foundryを活用したRAG（Retrieval-Augmented Generation）およびAgent機能を実装し、工場運用の効率化を目指します。
+### 🚧 Phase 2: RAG System（未実装）
 
-### 主要機能
-
-- 🔍 **Hybrid Search RAG**: Azure AI Search（ベクトル＋キーワード検索）
-- 🤖 **AI Agent**: Azure AI Foundry Assistants API + Function Calling
-- 📊 **工場データ分析**: 設備状態監視、データ分析ツール統合
-- 🌐 **Web API**: FastAPI による REST API（開発予定）
-
----
-
-## 🏗️ システムアーキテクチャ
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Azure Cloud                          │
-│                                                             │
-│  ┌──────────┐    ┌─────────────┐    ┌──────────────────┐   │
-│  │ FastAPI  │───▶│ AI Foundry  │───▶│ Azure AI Search  │   │
-│  │ Web App  │    │ Assistant   │    │ (Hybrid Search)  │   │
-│  └──────────┘    └──────┬──────┘    └──────────────────┘   │
-│                         │                                   │
-│                         ▼                                   │
-│                  ┌──────────────┐                           │
-│                  │ Azure OpenAI │                           │
-│                  │ (GPT-4o)     │                           │
-│                  └──────────────┘                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-詳細は [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) を参照。
+- Azure AI Search 統合
+- Document Indexing
+- Hybrid Search (Vector + Keyword)
+- Semantic Ranking
 
 ---
 
-## 🚀 クイックスタート
+## 🚀 Quick Start
 
 ### 前提条件
 
-- Python 3.11+
+- Python 3.13+
 - Azure サブスクリプション
-- Azure CLI
-- Git
+- Azure OpenAI リソース（gpt-4o デプロイ済み）
+- Azure CLI ログイン済み
 
-### セットアップ
-
+### インストール
 ```bash
 # リポジトリクローン
-git clone https://github.com/your-org/azure-rag-agent-poc.git
+git clone https://github.com/your-repo/azure-rag-agent-poc.git
 cd azure-rag-agent-poc
 
 # 仮想環境作成
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # 依存関係インストール
 pip install -r requirements.txt
 
 # 環境変数設定
 cp .env.example .env
-# .env を編集してAzure認証情報を設定
+# .env を編集して Azure OpenAI 情報を設定
 ```
 
-### Azure リソースのデプロイ
-
+### 起動
 ```bash
-# Azureログイン
-az login
+# 環境変数読み込み
+set -a
+source .env
+set +a
 
-# リソースグループ作成
-az group create --name rg-rag-poc --location japaneast
-
-# Bicepデプロイ（予定）
-az deployment group create \
-  --resource-group rg-rag-poc \
-  --template-file infra/main.bicep
+# サーバー起動
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### ローカル実行
-
+### テスト
 ```bash
-# RAGパイプラインテスト
-python -m pytest tests/test_rag_pipeline.py -v
+# Health Check
+curl http://127.0.0.1:8000/api/health
 
-# Function Callingテスト
-python -m pytest tests/test_function_calling.py -v
+# Chat（非ストリーミング）
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Hello","stream":false}'
 
-# Web API起動（Day 23-24実装予定）
-uvicorn app.main:app --reload
+# Chat（ストリーミング）
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Count to 5","stream":true}'
+```
+
+### Swagger UI
+
+http://127.0.0.1:8000/docs
+
+---
+
+## 🏗️ アーキテクチャ
+```
+┌─────────────────────────────────────────────────┐
+│                 FastAPI Server                  │
+│  ┌──────────────────────────────────────────┐   │
+│  │         API Routes                       │   │
+│  │  /api/health  /api/tools  /api/chat     │   │
+│  └──────────────┬───────────────────────────┘   │
+│                 │                               │
+│  ┌──────────────▼───────────────────────────┐   │
+│  │      FoundryAgentService                 │   │
+│  │  ┌────────────────────────────────────┐  │   │
+│  │  │   Azure OpenAI Client (openai SDK) │  │   │
+│  │  │   - Managed Identity 認証          │  │   │
+│  │  │   - Chat Completions API           │  │   │
+│  │  └────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────┐
+│            Azure OpenAI Service                 │
+│  Endpoint: oai-ragpoc-dev-ldt4idhueffoe        │
+│  Deployment: gpt-4o (2024-08-06)               │
+│  Authentication: Azure AD                       │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📚 ドキュメント
+## 📦 技術スタック
 
-### 開発ガイド
-- [Function Calling実装ガイド](docs/guides/FUNCTION_CALLING.md)
-- [Azure AI Foundryセットアップ](docs/setup/DAY15_AI_FOUNDRY_SETUP.md)
-
-### アーキテクチャ設計
-- [システムアーキテクチャ](docs/architecture/ARCHITECTURE.md)
-- [技術選定の判断履歴](docs/architecture/DECISIONS.md)
-- [トレードオフ分析](docs/architecture/TRADEOFFS.md)
-
-### 作業記録
-- [セッションサマリー一覧](docs/sessions/)
-  - [Day 15: AI Foundry初期セットアップ](docs/sessions/SESSION_SUMMARY_DAY15.md)
-  - [Day 17-18: Function Calling実装](docs/sessions/SESSION_SUMMARY_DAY17-18.md)
+| カテゴリ | 技術 | バージョン |
+|---------|------|-----------|
+| **API Framework** | FastAPI | 0.125.0 |
+| **Azure OpenAI** | openai | 2.13.0 |
+| **認証** | azure-identity | 1.25.1 |
+| **設定管理** | pydantic-settings | 2.12.5 |
+| **ASGI Server** | uvicorn | 0.38.0 |
 
 ---
 
-## 🧪 テスト
+## 🔐 セキュリティ
 
+- **認証方式**: Azure AD Managed Identity（キーレス）
+- **API Key**: 不使用
+- **RBAC**: Cognitive Services OpenAI User ロール
+- **TLS**: HTTPS 通信（Azure 標準）
+
+---
+
+## 📊 パフォーマンス
+
+| メトリクス | 目標 | 実測値 | 状態 |
+|----------|------|--------|------|
+| Latency (P50) | < 1s | ~500ms | ✅ |
+| Latency (P95) | < 3s | ~1.2s | ✅ |
+| Throughput | 10 req/s | 未測定 | - |
+| Error Rate | < 1% | 0% | ✅ |
+
+---
+
+## 📝 判断ログ
+
+実装における重要な技術選定の記録:
+
+- [DECISIONS.md](DECISIONS.md) - 採用した技術の判断理由
+- [TRADEOFFS.md](TRADEOFFS.md) - 却下した選択肢の分析
+- [ARCHITECTURE.md](ARCHITECTURE.md) - システム設計思想
+
+---
+
+## 🐛 トラブルシューティング
+
+### エラー: "Application startup failed"
 ```bash
-# 全テスト実行
-pytest
+# Azure CLI ログイン確認
+az account show
 
-# カバレッジレポート
-pytest --cov=app --cov-report=html
+# 環境変数確認
+echo $AZURE_OPENAI_ENDPOINT
+```
 
-# 特定テストのみ
-pytest tests/test_function_calling.py::test_parallel_function_calls -v
+### エラー: "Port 8000 already in use"
+```bash
+# プロセス停止
+lsof -ti:8000 | xargs kill -9
 ```
 
 ---
 
-## 🛠️ 技術スタック
+## 📚 参考資料
 
-| レイヤー | 技術 |
-|---------|------|
-| **フロントエンド** | FastAPI + Swagger UI（予定） |
-| **バックエンド** | Python 3.11, FastAPI |
-| **AI/ML** | Azure OpenAI (GPT-4o, text-embedding-ada-002) |
-| **検索** | Azure AI Search (Hybrid Search) |
-| **Agent** | Azure AI Foundry Assistants API |
-| **認証** | Azure Managed Identity (RBAC) |
-| **IaC** | Bicep（予定） |
-| **テスト** | pytest, pytest-asyncio |
-
----
-
-## 📈 開発ロードマップ
-
-- [x] **Phase 1**: Azure AI Search RAGパイプライン構築
-- [x] **Phase 2**: Azure AI Foundry環境セットアップ
-- [x] **Phase 3**: Function Calling実装（4ツール）
-- [ ] **Phase 4**: FastAPI Web化（Day 23-24）
-- [ ] **Phase 5**: Code Interpreter統合（Day 19-20）
-- [ ] **Phase 6**: File Search統合（Day 21-22）
-- [ ] **Phase 7**: 本番環境デプロイ
-
----
-
-## 🤝 貢献
-
-プロジェクトへの貢献を歓迎します。
-
-1. Fork this repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Azure Identity SDK](https://learn.microsoft.com/en-us/python/api/azure-identity/)
 
 ---
 
 ## 📄 ライセンス
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照。
-
----
-
-## 📞 連絡先
-
-**プロジェクト責任者**: Ryo Nakamizo  
-**組織**: 日野コンピューターシステム株式会社  
-**メール**: [your-email@example.com]
-
----
-
-## 🙏 謝辞
-
-- [Azure AI Foundry Documentation](https://learn.microsoft.com/azure/ai-studio/)
-- [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)
-- [FastAPI Framework](https://fastapi.tiangolo.com/)
+MIT License
