@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.api.routes import chat, health, tools
+from app.api.routes import chat, health, tools, rag
 
 # ロギング設定
 logging.basicConfig(
@@ -49,7 +49,7 @@ app.add_middleware(
 app.include_router(health.router, prefix=settings.API_V1_PREFIX, tags=["health"])
 app.include_router(tools.router, prefix=settings.API_V1_PREFIX, tags=["tools"])
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX, tags=["chat"])
-
+app.include_router(rag.router, prefix="/api/v1/rag", tags=["rag"])
 
 @app.get("/")
 async def root():
