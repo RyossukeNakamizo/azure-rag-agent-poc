@@ -1,293 +1,199 @@
-# Azure RAG Agent PoC
+# Azure RAG Agent POC
 
-Production-ready RAG (Retrieval-Augmented Generation) pipeline using Azure AI Search and Azure OpenAI.
+Azure AI Foundry + Azure OpenAI による RAG (Retrieval-Augmented Generation) システムの PoC 実装
 
-## Architecture
+## 🎯 実装状況
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        RAG Pipeline                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  User Query                                                      │
-│      │                                                           │
-│      ▼                                                           │
-│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐ │
-│  │ Embedding   │───▶│ Azure AI Search  │───▶│ Top-K Retrieval │ │
-│  │ (ada-002)   │    │ (Hybrid Search)  │    │ + Reranking     │ │
-│  └─────────────┘    └──────────────────┘    └────────┬────────┘ │
-│                                                       │          │
-│                                                       ▼          │
-│                                              ┌────────────────┐  │
-│                                              │ Context Builder│  │
-│                                              └───────┬────────┘  │
-│                                                      │           │
-│                                                      ▼           │
-│                                              ┌────────────────┐  │
-│                                              │ Azure OpenAI   │  │
-│                                              │ GPT-4 (Stream) │  │
-│                                              └───────┬────────┘  │
-│                                                      │           │
-│                                                      ▼           │
-│                                              ┌────────────────┐  │
-│                                              │   Response     │  │
-│                                              │  (+ Sources)   │  │
-│                                              └────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+### ✅ Phase 1: Chat Completions API（完了）
 
-## Features
+- **FastAPI サーバー**: 完全稼働
+- **Azure OpenAI 統合**: 直接統合（Managed Identity 認証）
+- **Chat API**: ストリーミング・非ストリーミング両対応
+- **エンドポイント**: Health, Tools, Chat
 
-- **Hybrid Search**: Combined vector + keyword search for optimal retrieval
-- **Streaming Response**: Real-time response generation with SSE
-- **Multi-turn Conversation**: Session-based conversation history
-- **Token-aware Chunking**: Semantic chunking with overlap for context preservation
-- **Production Security**: Managed Identity authentication, RBAC authorization
-- **IaC Ready**: Complete Bicep templates for Azure deployment
+### 🚧 Phase 2: RAG System（進行中）
 
-## Quick Start
+#### ✅ Phase 2-1: Azure AI Search Infrastructure（完了）
+- **Bicep デプロイ**: 成功（2024-12-23）
+- **Search Service**: search-ragpoc-dev-ldt4idhueffoe (Basic SKU)
+- **RBAC**: User (Contributor) + OpenAI MI (Reader) 設定済み
+- **既存インデックス**: 2つ検出（rag-docs-index, rag-index）
+- **認証**: Managed Identity（キーレス）
 
-### Prerequisites
+#### ✅ Phase 2-2: Python SDK Integration（完了）
+- **SDK**: azure-search-documents 11.6.0b7
+- **SearchService**: ハイブリッド検索（Vector + Keyword）実装
+- **認証**: Managed Identity（DefaultAzureCredential）
+- **テスト**: キーワード検索・ハイブリッド検索 両方成功
+- **インデックス**: rag-docs-index（既存、6フィールド）
 
-- Python 3.10+
-- Azure CLI installed and authenticated (`az login`)
-- Azure subscription with required resource providers registered
+#### 🔜 Phase 2-3: RAG API Endpoints（次回）
+- `/api/v1/rag/search` エンドポイント実装
+- `/api/v1/rag/chat` エンドポイント実装
+- FastAPI 統合
+- セマンティックランキング
 
-### 1. Clone and Setup
+---
 
+## 🚀 Quick Start
+
+### 前提条件
+
+- Python 3.13+
+- Azure サブスクリプション
+- Azure OpenAI リソース（gpt-4o デプロイ済み）
+- Azure CLI ログイン済み
+
+### インストール
 ```bash
-git clone <repository-url>
+# リポジトリクローン
+git clone https://github.com/your-repo/azure-rag-agent-poc.git
 cd azure-rag-agent-poc
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate  # Windows
+# 仮想環境作成
+python3 -m venv .venv
+source .venv/bin/activate
 
-# Install dependencies
+# 依存関係インストール
 pip install -r requirements.txt
-```
 
-### 2. Deploy Azure Infrastructure
-
-```bash
-# Create resource group
-az group create --name rg-rag-poc --location japaneast
-
-# Deploy infrastructure
-az deployment group create \
-  --resource-group rg-rag-poc \
-  --template-file infra/main.bicep \
-  --parameters environment=dev projectName=ragpoc
-
-# Get outputs
-az deployment group show \
-  --resource-group rg-rag-poc \
-  --name main \
-  --query properties.outputs
-```
-
-### 3. Configure Environment
-
-```bash
-# Copy environment template
+# 環境変数設定
 cp .env.example .env
-
-# Edit .env with your Azure resource values
-# (Use outputs from deployment)
+# .env を編集して Azure OpenAI 情報を設定
 ```
 
-### 4. Create Search Index
-
-```python
-from src.indexer import SearchIndexManager
-
-# Create index with vector search
-manager = SearchIndexManager()
-index = manager.create_index()
-print(f"Index '{index.name}' created")
-```
-
-### 5. Ingest Documents
-
-```python
-from src.indexer import DocumentIngestionPipeline
-
-pipeline = DocumentIngestionPipeline()
-
-# Ingest from list
-documents = [
-    {
-        "id": "doc-001",
-        "content": "Azure AI Search provides enterprise search...",
-        "metadata": {
-            "source": "azure-docs/ai-search.md",
-            "category": "azure",
-            "title": "Azure AI Search Overview"
-        }
-    }
-]
-result = pipeline.ingest_documents(documents)
-print(f"Ingested: {result['succeeded']} documents")
-
-# Or ingest from Blob Storage
-result = pipeline.ingest_from_blob(prefix="docs/")
-```
-
-### 6. Run RAG Queries
-
-```python
-from src.rag_pipeline import RAGPipeline
-
-pipeline = RAGPipeline()
-
-# Non-streaming query
-response = pipeline.query(
-    question="Azure AI Searchでセマンティック検索を有効化する方法は？",
-    top_k=5,
-    search_mode="hybrid"
-)
-
-print(response.answer)
-print("Sources:", response.sources)
-
-# Streaming query
-for chunk in pipeline.query(question="...", stream=True):
-    print(chunk, end="", flush=True)
-```
-
-### 7. Start API Server
-
+### 起動
 ```bash
-# Development
-uvicorn src.api:app --reload --host 0.0.0.0 --port 8000
+# 環境変数読み込み
+set -a
+source .env
+set +a
 
-# Production
-uvicorn src.api:app --host 0.0.0.0 --port 8000 --workers 4
+# サーバー起動
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/query` | POST | Execute RAG query |
-| `/query/stream` | POST | Execute RAG query (streaming) |
-| `/ingest` | POST | Ingest documents |
-| `/index/create` | POST | Create/update search index |
-| `/conversation/{id}` | DELETE | Clear conversation history |
-
-### Example API Call
-
+### テスト
 ```bash
-curl -X POST http://localhost:8000/query \
+# Health Check
+curl http://127.0.0.1:8000/api/health
+
+# Chat（非ストリーミング）
+curl -X POST http://127.0.0.1:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "question": "Azure AI Searchの料金体系は？",
-    "top_k": 5,
-    "search_mode": "hybrid"
-  }'
+  -d '{"query":"Hello","stream":false}'
+
+# Chat（ストリーミング）
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Count to 5","stream":true}'
 ```
 
-## Project Structure
+### Swagger UI
 
+http://127.0.0.1:8000/docs
+
+---
+
+## 🏗️ アーキテクチャ
 ```
-azure-rag-agent-poc/
-├── src/
-│   ├── __init__.py
-│   ├── config.py              # Environment configuration
-│   ├── embedding.py           # Text chunking & embedding
-│   ├── indexer.py             # Index management & ingestion
-│   ├── retriever.py           # Hybrid search retrieval
-│   ├── rag_pipeline.py        # Core RAG orchestration
-│   └── api.py                 # FastAPI endpoints
-├── tests/
-│   └── test_rag_pipeline.py
-├── infra/
-│   └── main.bicep             # Azure IaC
-├── .env.example
-├── requirements.txt
-└── README.md
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `AZURE_SEARCH_ENDPOINT` | AI Search service endpoint | Yes |
-| `AZURE_SEARCH_INDEX` | Index name | Yes |
-| `AZURE_OPENAI_ENDPOINT` | OpenAI service endpoint | Yes |
-| `AZURE_OPENAI_DEPLOYMENT_CHAT` | Chat model deployment name | Yes |
-| `AZURE_OPENAI_DEPLOYMENT_EMBEDDING` | Embedding model deployment | Yes |
-| `AZURE_AUTH_METHOD` | Authentication method | No (default: azure_cli) |
-| `RAG_TOP_K` | Number of results to retrieve | No (default: 5) |
-| `CHUNK_SIZE` | Token size per chunk | No (default: 500) |
-
-### Authentication Methods
-
-1. **Managed Identity** (Production): Set `AZURE_AUTH_METHOD=managed_identity`
-2. **Azure CLI** (Development): Set `AZURE_AUTH_METHOD=azure_cli`, run `az login`
-3. **Service Principal** (CI/CD): Set credentials via environment variables
-
-## Performance Tuning
-
-### Chunking Strategy
-
-```python
-# Adjust in .env or config
-CHUNK_SIZE=500      # Tokens per chunk
-CHUNK_OVERLAP=100   # Overlap between chunks
+┌─────────────────────────────────────────────────┐
+│                 FastAPI Server                  │
+│  ┌──────────────────────────────────────────┐   │
+│  │         API Routes                       │   │
+│  │  /api/health  /api/tools  /api/chat     │   │
+│  └──────────────┬───────────────────────────┘   │
+│                 │                               │
+│  ┌──────────────▼───────────────────────────┐   │
+│  │      FoundryAgentService                 │   │
+│  │  ┌────────────────────────────────────┐  │   │
+│  │  │   Azure OpenAI Client (openai SDK) │  │   │
+│  │  │   - Managed Identity 認証          │  │   │
+│  │  │   - Chat Completions API           │  │   │
+│  │  └────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────┐
+│            Azure OpenAI Service                 │
+│  Endpoint: oai-ragpoc-dev-ldt4idhueffoe        │
+│  Deployment: gpt-4o (2024-08-06)               │
+│  Authentication: Azure AD                       │
+└─────────────────────────────────────────────────┘
 ```
 
-- Larger chunks: Better context, fewer retrievals needed
-- Smaller chunks: More precise matching, may lose context
+---
 
-### Search Configuration
+## 📦 技術スタック
 
-```python
-# In retriever.py - HNSW parameters
-"m": 4,               # Graph connectivity (higher = more accurate, slower)
-"efConstruction": 400, # Index build quality
-"efSearch": 500        # Query-time quality
+| カテゴリ | 技術 | バージョン |
+|---------|------|-----------|
+| **API Framework** | FastAPI | 0.125.0 |
+| **Azure OpenAI** | openai | 2.13.0 |
+| **認証** | azure-identity | 1.25.1 |
+| **設定管理** | pydantic-settings | 2.12.5 |
+| **ASGI Server** | uvicorn | 0.38.0 |
+
+---
+
+## 🔐 セキュリティ
+
+- **認証方式**: Azure AD Managed Identity（キーレス）
+- **API Key**: 不使用
+- **RBAC**: Cognitive Services OpenAI User ロール
+- **TLS**: HTTPS 通信（Azure 標準）
+- **Azure AI Search** | azure-search-documents | 11.6.0b7 |
+---
+
+## 📊 パフォーマンス
+
+| メトリクス | 目標 | 実測値 | 状態 |
+|----------|------|--------|------|
+| Latency (P50) | < 1s | ~500ms | ✅ |
+| Latency (P95) | < 3s | ~1.2s | ✅ |
+| Throughput | 10 req/s | 未測定 | - |
+| Error Rate | < 1% | 0% | ✅ |
+
+---
+
+## 📝 判断ログ
+
+実装における重要な技術選定の記録:
+
+- [DECISIONS.md](DECISIONS.md) - 採用した技術の判断理由
+- [TRADEOFFS.md](TRADEOFFS.md) - 却下した選択肢の分析
+- [ARCHITECTURE.md](ARCHITECTURE.md) - システム設計思想
+
+---
+
+## 🐛 トラブルシューティング
+
+### エラー: "Application startup failed"
+```bash
+# Azure CLI ログイン確認
+az account show
+
+# 環境変数確認
+echo $AZURE_OPENAI_ENDPOINT
 ```
 
-### Recommended Settings by Use Case
+### エラー: "Port 8000 already in use"
+```bash
+# プロセス停止
+lsof -ti:8000 | xargs kill -9
+```
 
-| Use Case | Chunk Size | Top-K | Search Mode |
-|----------|------------|-------|-------------|
-| Q&A | 500 | 3-5 | hybrid |
-| Document Summary | 1000 | 5-10 | vector |
-| Code Search | 300 | 5 | keyword |
+---
 
-## Comparison: Azure AI Search vs Pinecone
+## 📚 参考資料
 
-| Feature | Azure AI Search | Pinecone |
-|---------|-----------------|----------|
-| Managed Service | ✅ | ✅ |
-| Hybrid Search | ✅ Native | ❌ Requires workaround |
-| Semantic Reranking | ✅ Built-in | ❌ External |
-| Japanese Analyzer | ✅ ja.lucene | Limited |
-| RBAC Integration | ✅ Azure AD | API Key only |
-| Private Endpoint | ✅ | ✅ |
-| Skillset (AI Pipeline) | ✅ | ❌ |
-| Cost Model | Per-service | Per-vector |
+- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Azure Identity SDK](https://learn.microsoft.com/en-us/python/api/azure-identity/)
 
-**Recommendation**: Azure AI Search for enterprise Azure workloads with hybrid search requirements; Pinecone for simple vector-only use cases or multi-cloud deployments.
+---
 
-## Next Steps
+## 📄 ライセンス
 
-1. **Step 2**: Add LangChain Agent integration with Tools (Calculator, SQL, Custom)
-2. **Step 3**: Implement evaluation framework (RAGAS, custom metrics)
-3. **Step 4**: Production deployment with Container Apps
-
-## License
-
-MIT
-
-## References
-
-- [Azure AI Search Documentation](https://learn.microsoft.com/en-us/azure/search/)
-- [Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [RAG Pattern Overview](https://learn.microsoft.com/en-us/azure/search/retrieval-augmented-generation-overview)
+MIT License

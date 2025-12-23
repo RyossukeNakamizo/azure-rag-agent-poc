@@ -1,54 +1,80 @@
-#!/usr/bin/env python3
-"""RAG検索テスト"""
-import os
-from dotenv import load_dotenv
-load_dotenv()
+"""Azure AI Search 疎通確認スクリプト"""
+import asyncio
+from src.core.config import get_settings
+from src.services.search_service import SearchService
+from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
-from azure.search.documents import SearchClient
-from azure.search.documents.models import VectorizedQuery
-from azure.core.credentials import AzureKeyCredential
-from src.embedding import EmbeddingService
-
-def main():
-    print("\n" + "="*50)
-    print("  RAG検索テスト")
-    print("="*50)
+async def test_search():
+    settings = get_settings()
     
-    search_client = SearchClient(
-        endpoint=os.getenv("AZURE_SEARCH_ENDPOINT"),
-        index_name=os.getenv("AZURE_SEARCH_INDEX"),
-        credential=AzureKeyCredential(os.getenv("AZURE_SEARCH_API_KEY")),
+    print(f"🔍 Search Endpoint: {settings.AZURE_SEARCH_ENDPOINT}")
+    print(f"📚 Index Name: {settings.AZURE_SEARCH_INDEX}")
+    
+    search_service = SearchService(
+        endpoint=settings.AZURE_SEARCH_ENDPOINT,
+        index_name=settings.AZURE_SEARCH_INDEX,
+        use_key_credential=False
     )
-    embedding_service = EmbeddingService()
     
-    queries = ["Azure AI Searchとは", "RAGアーキテクチャ"]
+    query = "Azure"
+    print(f"\n📝 Test Query: '{query}'")
     
-    for query in queries:
-        print(f"\n📝 クエリ: {query}")
-        print("-" * 40)
-        
-        query_vector = embedding_service.embed_text(query)
-        
-        vector_query = VectorizedQuery(
-            vector=query_vector,
-            k_nearest_neighbors=3,
-            fields="content_vector",
+    # 1. キーワード検索
+    print("\n--- Keyword Search ---")
+    try:
+        results = search_service.keyword_search(
+            query=query,
+            top_k=3,
+            select_fields=["id", "content", "filename"]
+        )
+        print(f"✅ Found {len(results)} documents")
+        for i, doc in enumerate(results, 1):
+            print(f"\n{i}. Score: {doc['score']:.4f}")
+            print(f"   ID: {doc.get('id', 'N/A')}")
+            print(f"   Filename: {doc.get('filename', 'N/A')}")
+            print(f"   Content: {doc.get('content', 'N/A')[:150]}...")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # 2. ハイブリッド検索
+    print("\n--- Hybrid Search ---")
+    try:
+        token_provider = get_bearer_token_provider(
+            DefaultAzureCredential(),
+            "https://cognitiveservices.azure.com/.default"
         )
         
-        results = search_client.search(
-            search_text=query,
-            vector_queries=[vector_query],
-            select=["id", "title", "content", "category"],
-            top=3,
+        openai_client = AzureOpenAI(
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_ad_token_provider=token_provider,
+            api_version=settings.AZURE_OPENAI_API_VERSION
         )
         
-        for i, r in enumerate(results, 1):
-            print(f"\n  [{i}] {r.get('title', 'N/A')}")
-            print(f"      カテゴリ: {r.get('category', 'N/A')}")
-            print(f"      スコア: {r.get('@search.score', 0):.4f}")
-            print(f"      内容: {r.get('content', '')[:80]}...")
-    
-    print("\n✅ 検索テスト完了")
+        response = openai_client.embeddings.create(
+            model=settings.AZURE_OPENAI_DEPLOYMENT_EMBEDDING,
+            input=query
+        )
+        query_embedding = response.data[0].embedding
+        print(f"✅ Generated embedding: {len(query_embedding)} dimensions")
+        
+        results = search_service.hybrid_search(
+            query=query,
+            query_vector=query_embedding,
+            top_k=3,
+            select_fields=["id", "content", "filename"]
+        )
+        print(f"✅ Found {len(results)} documents (hybrid)")
+        for i, doc in enumerate(results, 1):
+            print(f"\n{i}. Score: {doc['score']:.4f}")
+            print(f"   ID: {doc.get('id', 'N/A')}")
+            print(f"   Filename: {doc.get('filename', 'N/A')}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(test_search())

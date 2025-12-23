@@ -35,3 +35,34 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Bicep backup files
+*.backup
+*.bak
+
+# Bicep build outputs
+*.json
+!infra/parameters/*.json
+
+# Investigation scripts (not for production)
+investigate_*.py
+test_init_patterns.py
+
+# Backups
+backups/
+
+# Vim files
+vim
+
+# Temporary files
+"\343\201\276\343\201\237\343\201\257"
+
+# Backup files
+*.backup
+*.backup_*
+*~
+
+# Temporary files
+\#*
+vim
+
