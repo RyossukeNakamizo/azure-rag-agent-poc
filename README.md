@@ -11,12 +11,20 @@ Azure AI Foundry + Azure OpenAI による RAG (Retrieval-Augmented Generation) �
 - **Chat API**: ストリーミング・非ストリーミング両対応
 - **エンドポイント**: Health, Tools, Chat
 
-### 🚧 Phase 2: RAG System（未実装）
+### 🚧 Phase 2: RAG System（進行中）
 
-- Azure AI Search 統合
-- Document Indexing
-- Hybrid Search (Vector + Keyword)
-- Semantic Ranking
+#### ✅ Phase 2-1: Azure AI Search Infrastructure（完了）
+- **Bicep デプロイ**: 成功（2024-12-23）
+- **Search Service**: search-ragpoc-dev-ldt4idhueffoe (Basic SKU)
+- **RBAC**: User (Contributor) + OpenAI MI (Reader) 設定済み
+- **既存インデックス**: 2つ検出（rag-docs-index, rag-index）
+- **認証**: Managed Identity（キーレス）
+
+#### 🔜 Phase 2-2: Python SDK Integration（次回）
+- `azure-search-documents` SDK 実装
+- ハイブリッド検索（Vector + Keyword）
+- `/api/v1/rag/search` エンドポイント
+- セマンティックランキング
 
 ---
 
