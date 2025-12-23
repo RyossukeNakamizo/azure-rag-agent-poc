@@ -56,3 +56,13 @@ vim
 
 # Temporary files
 "\343\201\276\343\201\237\343\201\257"
+
+# Backup files
+*.backup
+*.backup_*
+*~
+
+# Temporary files
+\#*
+vim
+
