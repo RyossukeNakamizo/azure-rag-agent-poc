@@ -20,10 +20,17 @@ Azure AI Foundry + Azure OpenAI による RAG (Retrieval-Augmented Generation) �
 - **既存インデックス**: 2つ検出（rag-docs-index, rag-index）
 - **認証**: Managed Identity（キーレス）
 
-#### 🔜 Phase 2-2: Python SDK Integration（次回）
-- `azure-search-documents` SDK 実装
-- ハイブリッド検索（Vector + Keyword）
-- `/api/v1/rag/search` エンドポイント
+#### ✅ Phase 2-2: Python SDK Integration（完了）
+- **SDK**: azure-search-documents 11.6.0b7
+- **SearchService**: ハイブリッド検索（Vector + Keyword）実装
+- **認証**: Managed Identity（DefaultAzureCredential）
+- **テスト**: キーワード検索・ハイブリッド検索 両方成功
+- **インデックス**: rag-docs-index（既存、6フィールド）
+
+#### 🔜 Phase 2-3: RAG API Endpoints（次回）
+- `/api/v1/rag/search` エンドポイント実装
+- `/api/v1/rag/chat` エンドポイント実装
+- FastAPI 統合
 - セマンティックランキング
 
 ---
@@ -136,7 +143,7 @@ http://127.0.0.1:8000/docs
 - **API Key**: 不使用
 - **RBAC**: Cognitive Services OpenAI User ロール
 - **TLS**: HTTPS 通信（Azure 標準）
-
+- **Azure AI Search** | azure-search-documents | 11.6.0b7 |
 ---
 
 ## 📊 パフォーマンス
