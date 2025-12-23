@@ -4,6 +4,78 @@
 
 ---
 
+## 2025-12-23: Azure AI Search Schema Standardization
+
+**Status**: Accepted
+
+**Context**
+- Phase 2-4: Azure AI Search インデックス作成とサンプルデータ投入
+- RAG API (`app/api/routes/rag.py`) が期待するフィールド: `title`, `source`, `category`
+- 初期スクリプトが使用していたフィールド: `filename`, `url`, `chunk_id`
+- Azure AI Search 仕様: 既存フィールド削除不可（インデックス再作成が必須）
+
+**Decision**
+- **スキーマ統一**: 全コンポーネントで `title`, `source`, `category` を使用
+- **インデックス再作成**: 既存インデックス削除 → 正しいスキーマで再作成
+- **修正範囲**:
+  - `scripts/create_search_index.py`: `filename`/`url` → `title`/`source`
+  - `scripts/upload_sample_data.py`: 同上
+  - `app/services/search_service.py`: `chunk_id` 削除、`source`/`category` 追加
+  - `scripts/test_rag_e2e.py`: `filename` → `title`
+
+**Alternatives Considered**
+
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| API側修正 | スクリプト不変 | 複数エンドポイント影響 | 影響範囲大 |
+| 両フィールド保持 | 互換性確保 | ストレージコスト2倍 | 冗長性、保守性低下 |
+| **スクリプト側修正** | 影響範囲小 | インデックス再作成必須 | **採用** |
+
+**Consequences**
+- **技術的影響**:
+  - 修正時間: 約1時間（問題発見 + 修正 + 検証）
+  - 修正ファイル数: 4ファイル
+  - インデックス再作成: 1回（`scripts/delete_search_index.py` 作成）
+  
+- **データ品質影響**:
+  - スキーマ統一による保守性向上
+  - サンプルデータ5件投入成功
+  - カテゴリ別分布: AI Patterns (1), Azure Services (1), Infrastructure (1), Security (2)
+
+- **運用的影響**:
+  - Health Check: `degraded` → `healthy` (Search Service)
+  - E2Eテスト: 全クエリ成功（3クエリ × ハイブリッド検索 → RAG回答生成）
+
+**Validation**
+- ✅ `scripts/verify_index.py`: スキーマ確認完了（`id`, `content`, `title`, `source`, `category`, `contentVector`）
+- ✅ `scripts/upload_sample_data.py`: 5件正常投入
+- ✅ Health Check: Search Service `healthy`
+- ✅ E2Eテスト: 全通過
+  - Query 1: "Azure AI Searchのセマンティック検索" → 検索成功 + 回答生成
+  - Query 2: "Managed Identityの利点" → 検索成功 + 回答生成
+  - Query 3: "RAGシステムの実装方法" → 検索成功 + 四答生成
+
+**Final Schema**
+```python
+# Azure AI Search Index
+fields = [
+    SimpleField(name="id", type=String, key=True),
+    SearchableField(name="content", type=String),
+    SearchableField(name="title", type=String),      # ← filename から変更
+    SimpleField(name="source", type=String),          # ← url から変更
+    SimpleField(name="category", type=String),
+    SearchField(name="contentVector", type=Collection(Single), dimensions=1536)
+]
+```
+
+**Lessons Learned**
+1. **スキーマ設計の重要性**: APIとデータレイヤー間のスキーマ合意が不可欠
+2. **Azure AI Search 仕様**: フィールド削除不可のため、初期設計が重要
+3. **段階的検証**: インデックス作成 → データ投入 → E2Eテストの順当性
+4. **自動修正の有効性**: sed/filesystem:edit_file による一括置換で効率化
+
+---
+
 ## 2024-12-22: Azure AI Projects SDK 1.0.0b1 → Azure OpenAI 直接統合
 
 **Status**: Accepted

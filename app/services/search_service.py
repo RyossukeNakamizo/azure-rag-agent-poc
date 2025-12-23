@@ -54,7 +54,7 @@ class SearchService:
                 search_text=query,
                 vector_queries=[vector_query],
                 filter=filter_expression,
-                select=["id", "title", "content", "chunk_id"],
+                select=["id", "title", "content", "source", "category"],
                 top=top_k,
             )
             
@@ -64,7 +64,8 @@ class SearchService:
                     "id": result.get("id", ""),
                     "title": result.get("title", ""),
                     "content": result.get("content", ""),
-                    "chunk_id": result.get("chunk_id"),
+                    "source": result.get("source", ""),
+                    "category": result.get("category", ""),
                     "score": result.get("@search.score", 0.0),
                 })
             
@@ -88,7 +89,7 @@ class SearchService:
             results = self._client.search(
                 search_text=query,
                 filter=filter_expression,
-                select=["id", "title", "content", "chunk_id"],
+                select=["id", "title", "content", "source", "category"],
                 top=top_k,
             )
             
@@ -98,7 +99,8 @@ class SearchService:
                     "id": result.get("id", ""),
                     "title": result.get("title", ""),
                     "content": result.get("content", ""),
-                    "chunk_id": result.get("chunk_id"),
+                    "source": result.get("source", ""),
+                    "category": result.get("category", ""),
                     "score": result.get("@search.score", 0.0),
                 })
             

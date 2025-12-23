@@ -49,14 +49,14 @@ def create_search_index():
             analyzer_name="ja.microsoft"
         ),
         SearchableField(
-            name="filename",
+            name="title",
             type=SearchFieldDataType.String,
             filterable=True,
             sortable=True,
             facetable=True
         ),
         SimpleField(
-            name="url",
+            name="source",
             type=SearchFieldDataType.String,
             filterable=True
         ),
@@ -102,7 +102,7 @@ def create_search_index():
             SemanticConfiguration(
                 name="rag-semantic-config",
                 prioritized_fields=SemanticPrioritizedFields(
-                    title_field=SemanticField(field_name="filename"),
+                    title_field=SemanticField(field_name="title"),
                     content_fields=[SemanticField(field_name="content")],
                     keywords_fields=[SemanticField(field_name="category")]
                 )

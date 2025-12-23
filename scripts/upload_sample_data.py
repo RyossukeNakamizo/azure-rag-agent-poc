@@ -89,8 +89,8 @@ def upload_documents():
         doc = {
             'id': doc_id,
             'content': content,
-            'filename': md_file.name,
-            'url': f"file:///{DATA_DIR}/{md_file.name}",
+            'title': metadata['title'],
+            'source': f"file:///{DATA_DIR}/{md_file.name}",
             'category': metadata['category'],
             'contentVector': embedding
         }

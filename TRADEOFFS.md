@@ -4,6 +4,48 @@
 
 ---
 
+## API側スキーマ変更（却下）
+
+**Category**: Architecture
+
+**Considered For**: filename/url vs title/source 不一致解決
+
+**Rejection Factors**
+
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Impact Scope | High | 1/5 | 複数APIエンドポイント変更必要 |
+| Consistency | High | 2/5 | Pydanticモデル全体見直し |
+| Test Coverage | Medium | 2/5 | 全E2Eテスト再実行必要 |
+| Breaking Change | High | 1/5 | 既存クライアント影響（将来） |
+
+**Final Verdict**: スクリプト修正の方が影響範囲小、リスク低
+
+**Revisit Trigger**: 複数データソース統合時のメタデータ標準化要求時
+
+---
+
+## 両フィールド保持（filename/url + title/source）
+
+**Category**: Data Schema
+
+**Considered For**: スキーマ不一致の互換性解決
+
+**Rejection Factors**
+
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Storage Cost | High | 1/5 | ストレージコスト2倍 |
+| Maintainability | High | 1/5 | データ同期保護が必要 |
+| Clarity | Medium | 2/5 | どちらが正としいか不明瞠 |
+| Technical Debt | High | 1/5 | 将来のリファクタ負債 |
+
+**Final Verdict**: 冗長性が高く、保守性を劣化させる
+
+**Revisit Trigger**: 複数バージョンのAPI互換性が必須になった場合
+
+---
+
 ## Azure AI Projects SDK Assistants API
 
 **Category**: API Pattern

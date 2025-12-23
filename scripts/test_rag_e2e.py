@@ -44,7 +44,7 @@ def test_hybrid_search(query: str, search_client, openai_client):
     results = search_client.search(
         search_text=query,
         vector_queries=[vector_query],
-        select=["filename", "content", "category"],
+        select=["title", "content", "source", "category"],
         top=3
     )
     
@@ -55,7 +55,8 @@ def test_hybrid_search(query: str, search_client, openai_client):
     
     # 検索結果表示
     for i, result in enumerate(results_list, 1):
-        print(f"\n   [{i}] {result['filename']}")
+        print(f"\n   [{i}] {result['title']}")
+        print(f"       Source: {result['source']}")
         print(f"       Category: {result['category']}")
         print(f"       Score: {result['@search.score']:.4f}")
         print(f"       Preview: {result['content'][:100]}...")
@@ -70,7 +71,7 @@ def test_rag_generation(query: str, context_docs: list, openai_client):
     
     # コンテキスト構築
     context = "\n\n".join([
-        f"【{doc['filename']}】\n{doc['content']}"
+        f"【{doc['title']}】\n{doc['content']}"
         for doc in context_docs
     ])
     
