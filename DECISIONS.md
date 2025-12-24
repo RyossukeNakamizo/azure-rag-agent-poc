@@ -203,6 +203,134 @@ datasets
 
 ---
 
+## 2024-12-24: Evaluation Framework Selection (ADR-002)
+
+**Status**: Accepted
+
+**Context**
+- D21でRAG評価指標の改善が必要（Coherence 0.42→0.85+、Relevance 0.09→0.85+）
+- RAGASフレームワークの統合を検討したが、以下の制約に直面：
+  - Azure AI Foundry環境でのインストール困難（依存関係の競合）
+  - Managed Identity認証との統合が不明瞭（RAGAS内部でAPI Key前提の実装）
+  - 既存の評価パイプライン（Promptflow形式）との互換性問題
+
+**Decision**
+- **独自LLM-as-Judge実装を採用**
+  - Azure OpenAI直接呼び出し（Managed Identity認証）
+  - シンプルなプロンプトベース評価（Few-shot examples付き）
+  - 既存のバッチ評価フレームワークに統合
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| RAGAS統合 | 実績あるフレームワーク、多機能 | インストール困難、API Key依存、オーバーヘッド大 | 環境制約とセキュリティポリシー不適合 |
+| Azure AI Foundry Evaluators | ネイティブ統合、GUI操作可 | カスタマイズ性低、バッチ処理向きでない | 既存パイプライン再構築が必要 |
+| DeepEval | モダンなフレームワーク | RAGASと同様の統合課題 | 学習コスト増、環境制約 |
+
+**Consequences**
+- **ポジティブ**:
+  - Managed Identity認証を完全維持（セキュリティ強度維持）
+  - 既存パイプラインへの最小限の変更
+  - トラブルシューティングの容易性（依存関係削減）
+  - 評価ロジックの完全可視性と制御
+
+- **ネガティブ**:
+  - 評価プロンプトの品質維持が必要（継続的改善）
+  - RAGASの先進的機能（Context Precision等）は手動実装が必要
+  - コミュニティサポートが限定的
+
+**Validation**
+- **検証方法**: 22件の技術Q&Aデータセットでバッチ評価
+- **結果**:
+  - Coherence: 0.42 → **0.988** (+135.2%)
+  - Relevance: 0.09 → **0.963** (+969.4%)
+  - Groundedness: 0.17 → 0.375 (+120.6%、データ不足により目標未達)
+
+**Revisit Trigger**
+- Azure AI Foundry環境でRAGASの公式Managed Identity対応が実装された場合
+- 評価指標が10種類以上に拡大し、独自実装の保守コストが肥大化した場合
+
+---
+
+## 2024-12-24: Authentication Strategy - Managed Identity Adherence (ADR-003)
+
+**Status**: Accepted
+
+**Context**
+- D21評価実装中、一時的にAPI Key使用を検討する選択肢が浮上
+- 理由: RAGAS等の外部フレームワーク統合時の認証簡素化
+- しかし、プロジェクトのセキュリティポリシーは「Managed Identity優先」を明示
+
+**Decision**
+- **Managed Identity認証を堅持**
+  - すべてのAzure OpenAI呼び出しで`DefaultAzureCredential`使用
+  - API Keyは一切使用しない（ローカル開発環境でも`az login`経由）
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| API Key（開発環境限定） | 実装高速化、外部ライブラリ統合容易 | セキュリティリスク、本番環境との差異 | セキュリティポリシー違反 |
+| 環境変数によるAPI Key管理 | 柔軟性向上 | Key Vault必須、ローテーション負担 | 複雑性増加、リスク増 |
+
+**Consequences**
+- **ポジティブ**:
+  - 開発環境と本番環境の認証方式統一（デバッグ容易）
+  - API Key漏洩リスクゼロ
+  - Azure AD監査ログによる完全なアクセス追跡
+
+- **ネガティブ**:
+  - 外部ライブラリ（RAGAS等）統合時の制約
+  - 初期セットアップの複雑性（RBAC設定必須）
+
+**Validation**
+- すべての評価スクリプト（v2シリーズ）でManaged Identity動作確認済み
+- `azure-identity==1.19.0`の安定動作を確認
+
+**Revisit Trigger**
+- プロジェクトのセキュリティポリシー変更時のみ（現時点で予定なし）
+
+---
+
+## 2024-12-24: Data Augmentation Deferral (ADR-004)
+
+**Status**: Accepted
+
+**Context**
+- D21目標: 全指標0.85+達成
+- 現状: Coherence/Relevance達成、Groundedness未達（0.375）
+- 原因分析: データ不足（22件のみ、100件以上推奨）
+- 制約: D21期限内でのデータ拡充は時間的に困難
+
+**Decision**
+- **データ拡充を次フェーズ（D22-D24）に延期**
+  - D21は評価フレームワーク確立に集中
+  - データ拡充は専用タスクとして独立実施
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| D21内で強行拡充 | 全指標達成 | 品質低下リスク、期限超過 | 時間制約 |
+| 外部データセット流用 | 高速拡充 | ドメイン不一致、品質不明 | 本番想定外 |
+
+**Consequences**
+- **ポジティブ**:
+  - 評価フレームワークの品質確保（Coherence/Relevance実証済み）
+  - データ拡充作業を計画的に実施可能
+  - 次フェーズの明確な目標設定
+
+- **ネガティブ**:
+  - D21単独では3指標同時達成未完
+  - Groundedness改善は次フェーズ依存
+
+**Validation**
+- Coherence/Relevanceの高精度達成により、評価ロジックの正当性を実証
+- 次フェーズでデータ100件到達時、Groundedness 0.85+達成を見込む
+
+**Revisit Trigger**
+- なし（次フェーズで必ず実施）
+
+---
+
 ## 2024-12-22: Embedding Model Selection
 
 **Status**: Deferred（将来実装時に決定）

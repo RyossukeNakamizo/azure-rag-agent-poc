@@ -2,8 +2,8 @@
 
 > Azure RAG Agent POC - システムアーキテクチャ設計書
 
-**最終更新**: 2024-12-22  
-**バージョン**: 1.0  
+**最終更新**: 2024-12-24  
+**バージョン**: 1.1  
 **ステータス**: Active Development
 
 ---
@@ -140,6 +140,58 @@ Streaming SSE to client
 
 ---
 
+## Evaluation Architecture (D21追加)
+
+### 評価パイプライン構成
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Batch Evaluation Pipeline (v7)                 │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ Test Data    │───▶│ RAG System   │───▶│ LLM Response │  │
+│  │ (22 Q&As)    │    │ (Search+Gen) │    │              │  │
+│  └──────────────┘    └──────────────┘    └──────┬───────┘  │
+│                                                  │          │
+│                      ┌───────────────────────────┘          │
+│                      ▼                                      │
+│          ┌────────────────────────┐                         │
+│          │  3-Metric Evaluation   │                         │
+│          │  (LLM-as-Judge)        │                         │
+│          └────────────────────────┘                         │
+│                      │                                      │
+│          ┌───────────┴───────────┐                          │
+│          ▼           ▼           ▼                          │
+│     ┌─────────┐ ┌─────────┐ ┌─────────┐                    │
+│     │Coherence│ │Relevance│ │Grounded-│                    │
+│     │  0.988  │ │  0.963  │ │  ness   │                    │
+│     │         │ │         │ │  0.375  │                    │
+│     └─────────┘ └─────────┘ └─────────┘                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### LLM-as-Judge 実装方式
+
+| 評価指標 | プロンプト構造 | モデル | 認証 |
+|----------|--------------|-------|------|
+| Coherence | Few-shot (5 examples) + 5点スケール | gpt-4o | Managed Identity |
+| Relevance | Few-shot (5 examples) + 5点スケール | gpt-4o | Managed Identity |
+| Groundedness | Few-shot (3 examples) + Yes/No判定 | gpt-4o | Managed Identity |
+
+**設計原則**:
+1. **シンプルさ優先**: 外部フレームワーク依存を排除
+2. **セキュリティ**: すべてManaged Identity認証
+3. **再現性**: Few-shot examples固定、temperature=0
+4. **拡張性**: 新規指標追加は独立モジュールとして実装
+
+**制限事項**:
+- データ不足時のGroundedness精度低下（22件→100件で改善見込み）
+- プロンプト品質維持の手動管理必要
+- RAGASのContext Precision等の高度指標は未実装
+
+---
+
 ## セキュリティアーキテクチャ
 
 ### 認証フロー
@@ -190,7 +242,7 @@ Streaming SSE to client
 
 ---
 
-## 品質属性
+## 品質属性 (D21更新)
 
 ### パフォーマンス目標
 
@@ -200,6 +252,14 @@ Streaming SSE to client
 | API Latency (P95) | < 3s | Application Insights |
 | Search Latency (P95) | < 500ms | Azure AI Search metrics |
 | Embedding Generation | < 200ms | OpenAI API metrics |
+
+### 評価指標
+
+| Attribute | Target | Current (D21) | Measurement |
+|-----------|--------|--------------|-------------|
+| **Coherence** | **0.85** | **0.988 ✅** | **Batch Evaluation** |
+| **Relevance** | **0.85** | **0.963 ✅** | **Batch Evaluation** |
+| **Groundedness** | **0.85** | **0.375 ❌** | **Batch Evaluation** |
 
 ### 可用性
 
@@ -275,7 +335,13 @@ Streaming SSE to client
 
 ---
 
-## 将来的な拡張
+## 将来的な拡張 (D21更新)
+
+### 優先度: Critical
+
+| Feature | Trigger Condition | Estimated Effort | Status |
+|---------|------------------|------------------|--------|
+| **Data Augmentation** | **D22開始時** | **2-3 days** | **Planned** |
 
 ### 優先度: High
 
@@ -287,11 +353,12 @@ Streaming SSE to client
 
 ### 優先度: Medium
 
-| Feature | Trigger Condition | Estimated Effort |
-|---------|------------------|------------------|
-| Multi-region | 可用性99.9%要件時 | 5 days |
-| Code Interpreter | データ分析機能要求時 | 2 days |
-| File Search | PDF/長文検索要求時 | 2 days |
+| Feature | Trigger Condition | Estimated Effort | Status |
+|---------|------------------|------------------|--------|
+| Multi-region | 可用性99.9%要件時 | 5 days | Pending |
+| Code Interpreter | データ分析機能要求時 | 2 days | Pending |
+| File Search | PDF/長文検索要求時 | 2 days | Pending |
+| **Context Precision** | **評価指標拡大時** | **1-2 days** | **Deferred** |
 
 ### 優先度: Low
 
@@ -322,6 +389,11 @@ Streaming SSE to client
    - Impact: Medium
    - Resolution: Day 23-24で実装予定
 
+4. **Limited Evaluation Data (D21)**
+   - Status: 22件のみ（目標100件以上）
+   - Impact: High（Groundedness 0.375）
+   - Resolution: D22-D24でデータ拡充
+
 ---
 
 ## 参考資料
@@ -332,7 +404,8 @@ Streaming SSE to client
 - [Azure Well-Architected Framework](https://learn.microsoft.com/azure/well-architected/)
 
 ### Internal Documents
-- [技術選定の判断履歴](docs/decisions/README.md)
+- [技術選定の判断履歴](DECISIONS.md)
+- [却下オプション分析](TRADEOFFS.md)
 - [開発ガイド](docs/guides/development/)
 - [作業セッション記録](docs/sessions/README.md)
 
@@ -343,7 +416,8 @@ Streaming SSE to client
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2024-12-22 | Ryo Nakamizo | Initial architecture document |
+| 1.1 | 2024-12-24 | Ryo Nakamizo | D21評価アーキテクチャ追加、品質属性更新 |
 
 ---
 
-**次回更新予定**: Day 23-24（FastAPI統合後）
+**次回更新予定**: D22-D24（データ拡充後）

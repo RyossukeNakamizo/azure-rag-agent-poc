@@ -196,3 +196,106 @@
 **Revisit Trigger**: 
 - データ件数 1万件以下
 - 精度最優先の要件が発生した場合
+
+---
+
+## RAGAS Framework (D21)
+
+**Category**: Library
+
+**Considered For**: RAG評価指標の高度化（D21 Phase）
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Installation | High | 1/5 | Azure AI Foundry環境で依存関係エラー |
+| Security | High | 2/5 | API Key前提、Managed Identity統合不明 |
+| Integration | High | 2/5 | 既存Promptflow形式との互換性問題 |
+| Maintainability | Medium | 3/5 | ブラックボックス化、デバッグ困難 |
+| Features | Low | 5/5 | 先進的評価指標（Context Precision等） |
+
+**Final Verdict**: 環境制約とセキュリティポリシーにより統合困難。独自LLM-as-Judge実装で同等精度を達成可能と判断。
+
+**Revisit Trigger**:
+- Azure AI Foundry環境でRAGASの公式サポートが発表された場合
+- Managed Identity認証の統合方法が公式ドキュメント化された場合
+- 評価指標が10種類以上に拡大し、独自実装の保守コストが肥大化した場合
+
+**Evidence**:
+- D21独自実装での達成率: Coherence 0.988, Relevance 0.963（目標0.85突破）
+- RAGAS導入試行時間: 約3時間（インストールエラー解決に失敗）
+
+---
+
+## DeepEval Framework (D21)
+
+**Category**: Library
+
+**Considered For**: RAGAS代替の評価フレームワーク
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Maturity | High | 3/5 | 比較的新しいフレームワーク |
+| Documentation | Medium | 3/5 | Azure統合事例が少ない |
+| Learning Curve | Medium | 2/5 | 独自概念の学習必要 |
+| Azure Integration | High | 2/5 | RAGASと同様の懸念あり |
+
+**Final Verdict**: RAGASと同等の統合課題を抱える上、学習コスト増加。独自実装の方が効率的。
+
+**Revisit Trigger**:
+- DeepEvalのAzure公式統合が発表された場合
+- コミュニティでのAzure AI Foundry導入事例が確立された場合
+
+---
+
+## Azure AI Foundry Native Evaluators (D21)
+
+**Category**: Service Feature
+
+**Considered For**: プラットフォーム標準の評価機能
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Customizability | High | 2/5 | カスタム指標追加が困難 |
+| Batch Processing | High | 2/5 | 大量データ処理に不向き |
+| Pipeline Integration | High | 2/5 | 既存Pythonスクリプトとの統合複雑 |
+| Flexibility | Medium | 2/5 | GUI操作中心、自動化困難 |
+
+**Final Verdict**: GUI中心の設計のため、既存バッチ評価パイプラインとの統合が困難。Pythonスクリプトベースの柔軟性を優先。
+
+**Revisit Trigger**:
+- Azure AI FoundryのAPI経由バッチ評価機能が強化された場合
+- プロジェクトがGUI中心の運用に移行した場合
+
+**Evidence**:
+- 既存パイプライン（run_batch_evaluation_v7.py）との統合コスト: 推定5-7日
+- 独自実装での対応時間: 実質1日
+
+---
+
+## Immediate Data Augmentation (D21)
+
+**Category**: Project Planning
+
+**Considered For**: D21期限内での全指標目標達成
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Time Constraint | High | 1/5 | 残り時間でデータ拡充困難 |
+| Quality Risk | High | 2/5 | 急速拡充は品質低下リスク |
+| Priority | Medium | 2/5 | 評価フレームワーク確立が優先 |
+| ROI | Medium | 2/5 | 不完全データより完全フレームワーク |
+
+**Final Verdict**: D21はフレームワーク確立に集中し、データ拡充は計画的に次フェーズで実施する方が、全体的な品質と進捗管理が向上。
+
+**Revisit Trigger**:
+- なし（次フェーズD22-D24で必ず実施）
+
+**Evidence**:
+- 現状データ: 22件
+- 目標データ: 100件以上
+- 推定拡充時間: 2-3日（品質チェック込み）
+- D21残り時間: 実質0.5日
