@@ -1,0 +1,64 @@
+$schema: https://azuremlschemas.azureedge.net/promptflow/latest/Flow.schema.json
+environment:
+  python_requirements_txt: requirements.txt
+inputs:
+  question:
+    type: string
+  ground_truth:
+    type: string
+    default: ""
+outputs:
+  answer:
+    type: string
+    reference: ${generate_answer.output}
+  context:
+    type: string
+    reference: ${retrieve_context.output}
+  groundedness_score:
+    type: double
+    reference: ${evaluate_groundedness.output}
+  relevance_score:
+    type: double
+    reference: ${evaluate_relevance.output}
+  coherence_score:
+    type: double
+    reference: ${evaluate_coherence.output}
+nodes:
+  - name: retrieve_context
+    type: python
+    source:
+      type: code
+      path: nodes/retrieve.py
+    inputs:
+      question: ${inputs.question}
+  - name: generate_answer
+    type: python
+    source:
+      type: code
+      path: nodes/generate_answer.py
+    inputs:
+      question: ${inputs.question}
+      context: ${retrieve_context.output}
+  - name: evaluate_groundedness
+    type: python
+    source:
+      type: code
+      path: nodes/evaluate_groundedness.py
+    inputs:
+      answer: ${generate_answer.output}
+      context: ${retrieve_context.output}
+  - name: evaluate_relevance
+    type: python
+    source:
+      type: code
+      path: nodes/evaluate_relevance.py
+    inputs:
+      question: ${inputs.question}
+      answer: ${generate_answer.output}
+  - name: evaluate_coherence
+    type: python
+    source:
+      type: code
+      path: nodes/evaluate_coherence.py
+    inputs:
+      answer: ${generate_answer.output}

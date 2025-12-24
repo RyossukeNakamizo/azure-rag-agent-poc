@@ -66,3 +66,9 @@ vim
 \#*
 vim
 
+
+# Prompt Flow
+evaluation/flow/.env
+evaluation/flow/test_*.jsonl
+evaluation/flow/results_*
+.promptflow/
