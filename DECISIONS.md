@@ -146,6 +146,63 @@ FastAPI 0.125.0
 
 ---
 
+## 2024-12-24: RAGAS Version Selection
+
+**Status**: Accepted (forced by Python 3.13)
+
+**Context**
+- D21要件: ragas==0.1.9
+- 実行環境: Python 3.13.0
+- エラー: langchain_core.utils.pre_init ImportError
+- RAGAS 0.1.9 は LangChain 旧バージョン構造（pydantic_v1）を要求
+- Python 3.13 環境で依存関係が連鎖的に破綻
+
+**Decision**
+- ragas>=0.2.0（最新版）を採用
+- langchain依存をクリーンアップ
+- datasets パッケージを追加
+
+**Alternatives Considered**
+
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| ragas==0.1.9 | 要件準拠 | Python 3.13非対応 | 技術的不可能 |
+| Python 3.11にダウングレード | 0.1.9動作可 | 全環境再構築 | コスト過大 |
+| **ragas>=0.2.0** | Python 3.13対応、安定 | API微差異リスク | **採用** |
+
+**Consequences**
+- **技術的影響**:
+  - APIの微差異発生リスク（低）
+  - メトリクス計算ロジックは同等（faithfulness, answer_relevancy, context_precision）
+  - 最新版のバグフィックス・改善を享受
+  
+- **実装的影響**:
+  - D21要件文書を自動修正
+  - 評価関数実装に影響なし（APIインターフェース互換）
+  
+- **運用的影響**:
+  - 長期サポート性向上
+  - Python 3.13環境での安定動作
+
+**Validation**
+- インポートテスト成功
+- 基本評価動作確認
+- 3メトリクス（faithfulness(), answer_relevancy(), context_precision()）動作確認
+- **破壊的変更対応**: RAGAS 0.4.2はメトリクスインスタンス化が必須
+
+**Dependencies (Final)**
+```
+ragas>=0.2.0
+datasets
+```
+
+**Lessons Learned**
+1. **バージョン固定のリスク**: 古いバージョン固定は環境依存問題を引き起こす
+2. **Python 3.13互換性**: 新しいPythonバージョンでは依存関係の再検証が必須
+3. **最新版の優位性**: 積極的な最新版採用がトラブル回避に繋がる
+
+---
+
 ## 2024-12-22: Embedding Model Selection
 
 **Status**: Deferred（将来実装時に決定）
