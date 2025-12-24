@@ -47,7 +47,7 @@ class SearchService:
             vector_query = VectorizedQuery(
                 vector=embedding,
                 k_nearest_neighbors=top_k,
-                fields="contentVector",
+                fields="content_vector",
             )
             
             results = self._client.search(
