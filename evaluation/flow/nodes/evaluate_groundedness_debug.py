@@ -1,11 +1,9 @@
-"""Groundedness評価"""
+"""Groundedness評価（デバッグ版）"""
 import os
 from azure.identity import DefaultAzureCredential
 from openai import AzureOpenAI
 
 def evaluate_groundedness(answer: str, context: str) -> float:
-    """LLMを使用して回答の根拠性を評価（0.0-1.0）"""
-    
     credential = DefaultAzureCredential()
     client = AzureOpenAI(
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
@@ -30,17 +28,24 @@ def evaluate_groundedness(answer: str, context: str) -> float:
 スコアのみを数値で返してください（例: 0.9）。説明は不要です。"""
 
     try:
+        print(f"\n[DEBUG] Calling LLM...")
         response = client.chat.completions.create(
             model=os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4o"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=10
         )
-        
         result_text = response.choices[0].message.content.strip()
+        print(f"[DEBUG] LLM response: {result_text}")
         score = float(result_text)
+        print(f"[DEBUG] Parsed score: {score}")
         return max(0.0, min(1.0, score))
-        
     except Exception as e:
-        print(f"Warning: Groundedness evaluation failed: {e}")
+        print(f"[DEBUG] ERROR: {type(e).__name__}: {str(e)}")
         return 0.0
+
+if __name__ == "__main__":
+    answer = "HNSWのパラメータ推奨値はm=4、efConstruction=400、efSearch=500です。"
+    context = "HNSWパラメータの推奨値: m=4（グラフ接続数）、efConstruction=400（構築品質）、efSearch=500（検索品質）"
+    score = evaluate_groundedness(answer=answer, context=context)
+    print(f"\nFinal score: {score}")
