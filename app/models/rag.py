@@ -2,6 +2,7 @@
 RAG API Schemas
 
 Phase 2-3: RAG エンドポイント用 Pydantic モデル定義
+D22-1: Query Expansion対応
 """
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -38,6 +39,10 @@ class RAGChatRequest(BaseModel):
     max_tokens: int = Field(default=1000, ge=100, le=4000, description="最大トークン数")
     system_prompt: Optional[str] = Field(default=None, description="カスタムシステムプロンプト")
     filter: Optional[str] = Field(default=None, description="検索フィルター")
+    use_query_expansion: bool = Field(
+        default=False,
+        description="Query Expansionを有効化（+$0.001/query、Relevance改善）"
+    )
 
 
 class SourceReference(BaseModel):
@@ -53,6 +58,10 @@ class RAGChatResponse(BaseModel):
     sources: list[SourceReference] = Field(default_factory=list, description="参照ソース")
     context_used: int = Field(..., description="使用したコンテキスト数")
     model: str = Field(..., description="使用モデル")
+    expanded_queries: Optional[list[str]] = Field(
+        default=None,
+        description="展開されたクエリ（use_query_expansion=true時のみ）"
+    )
 
 
 class RAGHealthResponse(BaseModel):

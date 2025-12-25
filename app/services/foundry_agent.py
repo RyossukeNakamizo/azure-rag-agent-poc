@@ -2,6 +2,7 @@
 Azure AI Foundry Agent Service
 
 Azure OpenAI 直接統合版
+D22-1: get_embeddingメソッド追加
 """
 
 from openai import AzureOpenAI
@@ -45,6 +46,26 @@ class FoundryAgentService:
         except Exception as e:
             logger.error(f"Failed to initialize AzureOpenAI: {e}")
             raise
+    
+    def get_embedding(self, text: str) -> list[float]:
+        """
+        テキストをベクトル埋め込みに変換
+        
+        Args:
+            text: 埋め込み対象テキスト
+        
+        Returns:
+            埋め込みベクトル（1536次元）
+        """
+        try:
+            response = self.openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}")
+            return None
     
     async def chat_stream(
         self,

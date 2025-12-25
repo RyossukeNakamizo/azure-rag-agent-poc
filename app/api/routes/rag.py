@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import get_settings, Settings
 from app.services.search_service import SearchService
 from app.services.foundry_agent import FoundryAgentService
+from app.services.query_expansion_service import QueryExpansionService
 from app.models.rag import (
     RAGSearchRequest,
     RAGSearchResponse,
@@ -79,6 +80,9 @@ _agent_service = FoundryAgentService(
     azure_openai_deployment=settings.AZURE_OPENAI_DEPLOYMENT,
 )
 
+# Query Expansion Service初期化
+_query_expansion_service = QueryExpansionService()
+
 
 def get_search_service():
     """SearchService 依存性注入"""
@@ -94,6 +98,15 @@ def get_agent_service():
             status_code=500, detail="FoundryAgentService not initialized"
         )
     return _agent_service
+
+
+def get_query_expansion_service():
+    """QueryExpansionService依存性注入"""
+    if not _query_expansion_service:
+        raise HTTPException(
+            status_code=500, detail="QueryExpansionService not initialized"
+        )
+    return _query_expansion_service
 
 
 
@@ -189,24 +202,53 @@ async def rag_chat(
     request: RAGChatRequest,
     search_service: SearchService = Depends(get_search_service),
     agent_service: FoundryAgentService = Depends(get_agent_service),
+    query_expansion_service: QueryExpansionService = Depends(get_query_expansion_service),
     settings: Settings = Depends(get_settings),
 ):
     """RAG Chat（検索 + 回答生成）"""
     try:
-        logger.info(f"RAG chat: message='{request.message[:50]}...'")
+        logger.info(f"RAG chat: message='{request.message[:50]}...', use_query_expansion={request.use_query_expansion}")
         
-        # Step 1: Embedding
-        query_embedding = agent_service.get_embedding(request.message)
-        if not query_embedding:
-            raise HTTPException(status_code=500, detail="Failed to generate embedding")
+        # Step 0: Query Expansion
+        expanded_queries = None
+        if request.use_query_expansion:
+            expanded_queries = query_expansion_service.expand_query(
+                request.message,
+                max_expansions=3
+            )
+            logger.info(f"Expanded queries: {expanded_queries}")
+        else:
+            expanded_queries = [request.message]
         
-        # Step 2: 検索
-        search_results = search_service.hybrid_search(
-            query=request.message,
-            embedding=query_embedding,
-            top_k=request.top_k,
-            filter_expression=request.filter,
-        )
+        # Step 1: Embedding（複数クエリ対応）
+        all_search_results = []
+        
+        for query in expanded_queries:
+            query_embedding = agent_service.get_embedding(query)
+            if not query_embedding:
+                continue
+            
+            # Step 2: 検索
+            results = search_service.hybrid_search(
+                query=query,
+                embedding=query_embedding,
+                top_k=request.top_k // len(expanded_queries),
+                filter_expression=request.filter,
+            )
+            all_search_results.extend(results)
+        
+        # Step 2.5: 重複排除 + スコアソート
+        unique_results = {}
+        for doc in all_search_results:
+            doc_id = doc.get("id", "")
+            if doc_id not in unique_results or doc.get("score", 0) > unique_results[doc_id].get("score", 0):
+                unique_results[doc_id] = doc
+        
+        search_results = sorted(
+            unique_results.values(),
+            key=lambda x: x.get("score", 0),
+            reverse=True
+        )[:request.top_k]
         
         # Step 3: コンテキスト構築
         if search_results:
@@ -239,11 +281,11 @@ async def rag_chat(
             messages=messages,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            stream=False,
         )
         
-        answer = response.choices[0].message.content if response.choices else "回答を生成できませんでした"
+        answer = response.get("content", "")
         
+        # Step 6: ソース参照構築
         sources = [
             SourceReference(
                 id=doc.get("id", ""),
@@ -258,6 +300,7 @@ async def rag_chat(
             sources=sources,
             context_used=len(search_results),
             model=settings.AZURE_OPENAI_DEPLOYMENT_CHAT,
+            expanded_queries=expanded_queries if request.use_query_expansion else None,
         )
         
     except HTTPException:
