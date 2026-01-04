@@ -210,6 +210,7 @@ async def health_check(
         except Exception as e:
             cosmos_status = f"unhealthy: {str(e)[:50]}"
     
+    # 全体ステータス判定（Cosmos DBはオプショナルなのでhealthy判定に含めない）
     overall = "healthy" if search_status == "healthy" and openai_status == "healthy" else "degraded"
     
     return RAGHealthResponse(
@@ -217,6 +218,7 @@ async def health_check(
         search_service=search_status,
         index_name=settings.AZURE_SEARCH_INDEX,
         openai_service=openai_status,
+        cosmos_db=cosmos_status,
     )
 
 

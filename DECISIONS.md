@@ -428,3 +428,147 @@ datasets
 - ✅ Swagger UI: http://127.0.0.1:8000/docs
 - ✅ ReDoc: http://127.0.0.1:8000/redoc
 - ✅ 依存性注入: AgentServiceDep 動作確認
+
+### 2026-01-04: Conversation History Data Store Selection (D24)
+
+**Status**: Accepted
+
+**Context**
+- RAGシステムにマルチターン会話履歴機能を追加
+- セッション単位での履歴管理が必要
+- 自動クリーンアップ（TTL）機能が必須
+- Managed Identity認証を維持
+
+**Decision**
+- Azure Cosmos DB for NoSQL（Serverless）を採用
+- パーティションキー: `/sessionId`
+- TTL: 30日（2592000秒）
+- 認証: Managed Identity（RBAC）
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Azure Table Storage | 低コスト、シンプル | TTLなし、クエリ制限 | 自動クリーンアップ不可 |
+| Azure SQL Database | 強力なクエリ、トランザクション | オーバースペック、固定コスト | 会話履歴には過剰 |
+| Azure Cache for Redis | 超低レイテンシ | 揮発性、永続化コスト高 | データ永続性要件未達 |
+
+**Consequences**
+- Serverlessで従量課金（低トラフィック時はほぼ無料）
+- TTLによる自動データクリーンアップでストレージコスト最適化
+- RBAC権限設定が必要（ローカル開発時に追加設定）
+
+**Validation**
+- マルチターン会話テスト: `history_used=1`, `turn_number=2` 確認
+- セッション継続: 同一`session_id`での履歴取得成功
+
+---
+
+### 2026-01-04: Cosmos DB Partition Key Strategy (D24)
+
+**Status**: Accepted
+
+**Context**
+- 会話履歴のパーティションキー設計
+- セッション単位でのクエリが主要アクセスパターン
+
+**Decision**
+- パーティションキー: `/sessionId`
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| /userId | ユーザー単位集約 | セッション跨ぎクエリ増 | クエリパターン不一致 |
+| /createdAt | 時系列整理 | 範囲クエリ非効率 | Cosmos DBの制約 |
+
+**Consequences**
+- セッション単位クエリが最適化
+- ユーザー跨ぎ分析には追加インデックス必要
+
+**Validation**
+- セッション内履歴取得: 単一パーティションクエリで高速
+
+---
+
+### 2026-01-04: Health Check Endpoint Enhancement (D25-1)
+
+**Status**: Accepted
+
+**Context**
+- D24でCosmos DB統合完了
+- ヘルスチェックエンドポイント `/api/v1/rag/health` にCosmos DBステータスが含まれていない
+- 運用時の問題切り分けにCosmos DB接続状態の可視化が必要
+
+**Decision**
+- `RAGHealthResponse` モデルに `cosmos_db` フィールドを追加
+- ステータス値: `disabled` / `healthy` / `unhealthy: {error}`
+- 全体ステータス判定にCosmos DBは含めない（オプショナルサービスのため）
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| 別エンドポイント `/health/cosmos` | 関心の分離 | 運用複雑化 | 統合ビューが望ましい |
+| 全体ステータスに含める | 厳格な監視 | Cosmos DB無効時もdegraded | オプショナル機能 |
+
+**Consequences**
+- 単一エンドポイントで全サービス状態を確認可能
+- Cosmos DB障害時も `status: healthy`（Search/OpenAI正常時）
+- グレースフルデグラデーション実現
+
+**Validation**
+- ✅ `cosmos_db: "healthy"` レスポンス確認
+- ✅ 全体ステータス `healthy` 維持確認
+
+**Files Modified**
+```
+app/models/rag.py              # RAGHealthResponse.cosmos_db追加
+app/api/routes/rag.py          # レスポンスにcosmos_db含める
+```
+
+---
+
+### 2026-01-04: E2E Test Strategy (D25-2)
+
+**Status**: Accepted
+
+**Context**
+- D24 Cosmos DB統合完了後、包括的なE2Eテストが未整備
+- 既存テスト `tests/test_rag_pipeline.py` は古い `src/` 構造を参照
+- 新規機能（マルチターン会話）のリグレッションテストが必要
+
+**Decision**
+- pytest用E2Eテストスイート `tests/test_e2e_rag_api.py` 作成
+- 手動実行用簡易スクリプト `scripts/quick_e2e_test.py` 作成
+- 5カテゴリ・20+テストケースでカバレッジ確保
+
+**Test Categories**
+| Category | Tests | Coverage |
+|----------|-------|---------|
+| Health Check | 4 | 全サービスステータス、Cosmos DB含む |
+| Hybrid Search | 3 | 検索結果、スコア、top_k |
+| RAG Chat | 4 | 回答生成、ソース引用、Query Expansion |
+| Multi-turn | 4 | セッション作成、履歴使用、継続性 |
+| Error Handling | 3 | バリデーションエラー |
+| Performance | 3 | レイテンシ確認 |
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| 既存テスト修正 | 作業量少 | 構造不一致、技術的負債 | 全面書き換え同等 |
+| 統合テストのみ | シンプル | カバレッジ不足 | マルチターン検証不可 |
+
+**Consequences**
+- 新機能追加時のリグレッション検出が容易
+- CI/CD統合可能（pytest実行）
+- 手動検証も色付き出力で視認性向上
+
+**Validation**
+- ✅ 5/5カテゴリ全テスト合格
+- ✅ マルチターン会話: `history_used=1`, `turn_number=2` 確認
+
+**Files Created**
+```
+tests/test_e2e_rag_api.py      # pytest用E2Eテストスイート
+scripts/quick_e2e_test.py      # 手動実行用簡易スクリプト
+```
+
+---

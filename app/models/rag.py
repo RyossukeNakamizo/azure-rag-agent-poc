@@ -70,3 +70,7 @@ class RAGHealthResponse(BaseModel):
     search_service: str = Field(..., description="Search サービス状態")
     index_name: str = Field(..., description="使用インデックス名")
     openai_service: str = Field(..., description="OpenAI サービス状態")
+    cosmos_db: str = Field(
+        default="disabled",
+        description="Cosmos DB サービス状態（disabled/healthy/unhealthy）"
+    )

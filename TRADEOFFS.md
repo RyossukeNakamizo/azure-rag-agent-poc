@@ -461,3 +461,138 @@
 - 本番環境デプロイ時
 - リクエスト数が予測可能になった場合
 - SLA要件が発生した場合
+
+### Azure Table Storage (D24)
+
+**Category**: Service
+
+**Considered For**: 会話履歴データストア
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| TTL Support | High | 1/5 | ネイティブTTLなし |
+| Query Flexibility | Medium | 2/5 | PartitionKey + RowKeyのみ |
+| Cost | Low | 5/5 | 非常に安価 |
+
+**Final Verdict**: TTL機能がなく、自動クリーンアップの実装が必要
+
+**Revisit Trigger**: TTLが不要で、シンプルなKey-Valueアクセスのみの場合
+
+---
+
+### Azure SQL Database (D24)
+
+**Category**: Service
+
+**Considered For**: 会話履歴データストア
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Complexity | High | 2/5 | スキーマ設計・マイグレーション必要 |
+| Cost | High | 2/5 | 固定コスト発生 |
+| Features | Low | 5/5 | 強力なクエリ・トランザクション |
+
+**Final Verdict**: 会話履歴にはオーバースペック、固定コストが不利
+
+**Revisit Trigger**: 複雑な分析クエリ、トランザクション整合性が必要な場合
+
+---
+
+### Azure Cache for Redis (D24)
+
+**Category**: Service
+
+**Considered For**: 会話履歴データストア
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Persistence | High | 1/5 | 基本的に揮発性メモリ |
+| Cost | High | 2/5 | 永続化オプションは高額 |
+| Latency | Low | 5/5 | サブミリ秒レスポンス |
+
+**Final Verdict**: 永続性要件を満たさない、コスト高
+
+**Revisit Trigger**: キャッシュ層としての併用、超低レイテンシ要件
+
+---
+
+## D25: Health Check & E2E Test - Rejected Alternatives
+
+### Separate Health Endpoint for Cosmos DB (D25-1)
+
+**Category**: API Design
+
+**Considered For**: Cosmos DBステータスの可視化
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Operational Simplicity | High | 2/5 | 複数エンドポイントの管理負荷 |
+| Consistency | High | 2/5 | 他サービスとの統一感欠如 |
+| Implementation Cost | Low | 4/5 | 実装は簡単 |
+
+**Final Verdict**: 単一エンドポイントでの統合ビューが運用上望ましい
+
+**Revisit Trigger**: Cosmos DB固有の詳細診断が必要になった場合
+
+---
+
+### Include Cosmos DB in Overall Health Status (D25-1)
+
+**Category**: API Design
+
+**Considered For**: ヘルスチェックの全体ステータス判定
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Graceful Degradation | High | 1/5 | Cosmos DB無効時も全体degraded |
+| Optional Service | High | 1/5 | COSMOS_DB_ENABLED=falseで使用可能 |
+| Strictness | Medium | 4/5 | 厳密な監視が可能 |
+
+**Final Verdict**: Cosmos DBはオプショナル機能のため、全体ステータスには含めない
+
+**Revisit Trigger**: Cosmos DBが必須機能になった場合
+
+---
+
+### Modify Existing Test Files (D25-2)
+
+**Category**: Testing Strategy
+
+**Considered For**: E2Eテスト整備
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Effort | High | 2/5 | 全面書き換えと同等の作業量 |
+| Technical Debt | High | 1/5 | `src/`構造への依存が残る |
+| Maintainability | High | 2/5 | 保守性低下 |
+
+**Final Verdict**: 新規作成の方が保守性・可読性向上
+
+**Revisit Trigger**: なし
+
+---
+
+### Integration Tests Only (D25-2)
+
+**Category**: Testing Strategy
+
+**Considered For**: E2Eテスト整備
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Coverage | High | 2/5 | マルチターン会話の検証不可 |
+| Simplicity | Low | 5/5 | 実装シンプル |
+| Regression Detection | High | 2/5 | 検出能力不足 |
+
+**Final Verdict**: カバレッジ不足、特にCosmos DB統合部分の検証が不十分
+
+**Revisit Trigger**: なし
+
+---
