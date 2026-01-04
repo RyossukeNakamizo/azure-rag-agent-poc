@@ -366,3 +366,98 @@
 - Monthly queries > 175,000
 - Groundedness becomes critical (>0.850)
 - Budget approval for $175/month
+
+---
+
+## D24: Cosmos DB Integration - Rejected Alternatives
+
+### Azure Table Storage
+
+**Category**: Data Storage
+
+**Considered For**: 会話履歴の永続化
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Query Flexibility | High | 2/5 | PartitionKey/RowKeyのみ、セカンダリインデックスなし |
+| Schema Flexibility | High | 2/5 | 固定スキーマ前提 |
+| TTL Support | Medium | 3/5 | 手動実装必要 |
+| Cost | Low | 5/5 | 非常に低コスト |
+| Learning Curve | Low | 5/5 | シンプルAPI |
+
+**Final Verdict**: 却下 - createdAt順ソートや柔軟なクエリが必要
+
+**Revisit Trigger**: 
+- コスト最小化が絶対優先になった場合
+- クエリパターンがPartitionKey/RowKeyのみに単純化された場合
+
+---
+
+### Azure SQL Database
+
+**Category**: Data Storage
+
+**Considered For**: 会話履歴の永続化
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Cost | High | 1/5 | 最小構成でも¥帾2,000/月 |
+| Schema Management | High | 2/5 | マイグレーション管理必要 |
+| Scalability | High | 4/5 | 垂直スケールのみ |
+| Query Power | Low | 5/5 | 強力なSQLサポート |
+| Overkill | High | 1/5 | 単純なKVアクセスには過剰 |
+
+**Final Verdict**: 却下 - オーバースペック、コスト高
+
+**Revisit Trigger**: 
+- 複雑なJOINクエリが必要になった場合
+- トランザクション要件が発生した場合
+- 既存SQL Serverの活用が求められた場合
+
+---
+
+### Azure Cache for Redis
+
+**Category**: Data Storage
+
+**Considered For**: 会話履歴の永続化
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Persistence | High | 2/5 | デフォルトはインメモリ、永続化オプションあり |
+| Cost | High | 2/5 | Premium tierで¥帾15,000/月～ |
+| Query Flexibility | High | 3/5 | Redisクエリは限定的 |
+| Latency | Low | 5/5 | ミリ秒レベル |
+| Data Integrity | High | 2/5 | 障害時のデータ損失リスク |
+
+**Final Verdict**: 却下 - 永続化要件とコストのバランスが悪い
+
+**Revisit Trigger**: 
+- 履歴取得レイテンシが<10ms必須になった場合
+- セッションキャッシュ（短期TTL）としての利用
+
+---
+
+### Cosmos DB Provisioned Throughput
+
+**Category**: Service Tier
+
+**Considered For**: 本番環境構成
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Cost Predictability | Medium | 4/5 | 固定費用で予測可能 |
+| Development Cost | High | 2/5 | 開発フェーズには過剰 |
+| Throughput Guarantee | Low | 5/5 | RU/s保証 |
+| Autoscale | Medium | 4/5 | 400-4000 RU/s自動スケール |
+
+**Final Verdict**: 開発フェーズでは却下、本番移行時に再評価
+
+**Revisit Trigger**: 
+- 本番環境デプロイ時
+- リクエスト数が予測可能になった場合
+- SLA要件が発生した場合

@@ -1,5 +1,6 @@
 // ===================================================================
 // Azure RAG Agent POC - Infrastructure
+// Version: 2.0 (D24 - Cosmos DB Integration)
 // ===================================================================
 targetScope = 'resourceGroup'
 
@@ -15,6 +16,13 @@ param uniqueSuffix string = uniqueString(resourceGroup().id)
 
 @description('既存 Azure OpenAI リソース名')
 param existingOpenAIName string = 'oai-ragpoc-dev-ldt4idhueffoe'
+
+@description('Cosmos DBスループットモード')
+@allowed(['Serverless', 'Provisioned'])
+param cosmosDbThroughputMode string = 'Serverless'
+
+@description('Cosmos DB デプロイを有効化')
+param deployCosmosDb bool = true
 
 // -------------------------------------------------------------------
 // 共通タグ
@@ -50,14 +58,39 @@ module search 'modules/search.bicep' = {
 }
 
 // -------------------------------------------------------------------
+// Module 2: Azure Cosmos DB (D24追加)
+// -------------------------------------------------------------------
+module cosmosDb 'modules/cosmos-db.bicep' = if (deployCosmosDb) {
+  name: 'cosmosdb-deployment-${uniqueSuffix}'
+  params: {
+    projectName: 'ragpoc'
+    environment: environment
+    location: location
+    throughputMode: cosmosDbThroughputMode
+    tags: commonTags
+    // principalId: '' // App Service MI追加時に設定
+  }
+}
+
+// -------------------------------------------------------------------
 // 出力
 // -------------------------------------------------------------------
+
+// Azure OpenAI
 output azureOpenAIEndpoint string = existingOpenAI.properties.endpoint
 output azureOpenAIPrincipalId string = existingOpenAI.identity.principalId
 
+// Azure AI Search
 output azureSearchEndpoint string = search.outputs.searchEndpoint
 output azureSearchPrincipalId string = search.outputs.searchPrincipalId
 output azureSearchServiceName string = search.outputs.searchServiceName
 
+// Azure Cosmos DB (D24追加)
+output cosmosDbEndpoint string = deployCosmosDb ? cosmosDb.outputs.endpoint : ''
+output cosmosDbAccountName string = deployCosmosDb ? cosmosDb.outputs.accountName : ''
+output cosmosDbDatabaseName string = deployCosmosDb ? cosmosDb.outputs.databaseName : ''
+output cosmosDbContainerName string = deployCosmosDb ? cosmosDb.outputs.containerName : ''
+
+// General
 output resourceGroupName string = resourceGroup().name
 output environment string = environment

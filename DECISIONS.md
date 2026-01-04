@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-01-04: Cosmos DB Integration for Conversation History (D24)
+
+**Status**: Accepted
+
+**Context**
+- RAGシステムにマルチターン対話機能が必要
+- 会話履歴の永続化でコンテキスト継続性を実現
+- 面接デモでの差別化要素として会話履歴機能を追加
+
+**Decision**
+- **Azure Cosmos DB for NoSQL（Serverless）**を採用
+- パーティションキー: `/sessionId`（セッション単位クエリ最適化）
+- 認証: Managed Identity（既存パターン踏襲）
+- TTL: 30日（自動クリーンアップ）
+
+**Alternatives Considered**
+
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Azure Table Storage | 低コスト、シンプル | クエリ機能限定 | 柔軟なクエリ要件 |
+| Azure SQL Database | 強力なクエリ、トランザクション | 高コスト、オーバースペック | 単純なKVアクセスに過剰 |
+| Redis Cache | 超低レイテンシ | 永続性弱、コスト | 履歴永続化要件 |
+| **Cosmos DB Serverless** | 従量課金、柔軟なスキーマ、低レイテンシ | 若干の学習コスト | **採用** |
+
+**Consequences**
+- **技術的影響**:
+  - 新規ファイル: 5ファイル（Bicep 1、Python 4）
+  - 新規エンドポイント: `/api/chat/with-history`
+  - 既存エンドポイント: 変更なし（後方互換）
+
+- **コスト影響**:
+  - 開発環境: ~¥500-2,000/月（Serverless）
+  - 本番環境: ~¥3,000/月（Provisioned 400 RU/s）
+
+- **運用的影響**:
+  - セッション管理の自動化
+  - 30日後の自動TTL削除
+  - COSMOS_DB_ENABLED=false で無効化可能
+
+**Validation**
+- [ ] Bicepデプロイ成功
+- [ ] Repositoryパターン動作確認
+- [ ] /api/chat/with-history エンドポイント動作確認
+- [ ] マルチターン対話の文脈継続確認
+
+**Files Created**
+```
+infra/modules/cosmos-db.bicep           # Cosmos DBリソース定義
+app/models/conversation.py              # 会話データモデル
+app/repositories/cosmos_repository.py   # データアクセス層
+app/services/conversation_service.py    # ビジネスロジック
+docs/COSMOS_DB_DESIGN.md                # 設計ドキュメント
+```
+
+---
+
 ## 2025-12-23: Azure AI Search Schema Standardization
 
 **Status**: Accepted

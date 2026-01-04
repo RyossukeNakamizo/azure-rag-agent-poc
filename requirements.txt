@@ -123,3 +123,6 @@ zope.interface==8.1.1
 
 # Azure AI Search (Phase 2-2)
 azure-search-documents==11.6.0b7
+
+# Azure Cosmos DB (D24)
+azure-cosmos==4.9.0

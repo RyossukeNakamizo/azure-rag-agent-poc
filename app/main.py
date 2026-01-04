@@ -4,6 +4,9 @@ Azure RAG Agent POC - FastAPI Application
 Main application entry point
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

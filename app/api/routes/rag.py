@@ -2,10 +2,11 @@
 RAG API Routes
 
 Phase 2-3: RAG エンドポイント実装
+D24: Cosmos DB会話履歴統合
 """
 import logging
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -22,6 +23,11 @@ from app.models.rag import (
     RAGChatResponse,
     SourceReference,
     RAGHealthResponse,
+)
+from app.models.conversation import (
+    ChatWithHistoryRequest,
+    ChatWithHistoryResponse,
+    SourceInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,26 @@ DEFAULT_RAG_SYSTEM_PROMPT = """あなたはAzure技術の専門家です。
 - 実装例（該当する場合）
 - 参照元の明記"""
 
+# 会話履歴を考慮したシステムプロンプト
+MULTI_TURN_SYSTEM_PROMPT = """あなたはAzure技術の専門家です。
+
+【会話の継続性】
+- 過去の会話履歴を参照して、文脈に沿った回答を提供してください
+- 前の質問で言及された技術やトピックについては、明示的な繰り返しを避けてください
+- 「それ」「その」などの指示語が使われた場合は、会話履歴から参照対象を特定してください
+
+【コンテキスト評価基準】
+以下の基準でコンテキストの関連性を判断してください：
+1. 質問との直接的関連性（最重要）
+2. 情報の新しさ・正確性
+3. 具体的実装例の有無
+
+【回答ルール】
+1. 提供されたコンテキストと会話履歴を使用して回答する
+2. コンテキストに情報がない場合は明示する
+3. ソース引用は必須
+4. 日本語で回答する"""
+
 # グローバルインスタンス初期化
 settings = get_settings()
 
@@ -80,8 +106,37 @@ _agent_service = FoundryAgentService(
     azure_openai_deployment=settings.AZURE_OPENAI_DEPLOYMENT,
 )
 
-# Query Expansion Service初期化
 _query_expansion_service = QueryExpansionService()
+
+# Cosmos DB関連（条件付き初期化）
+_conversation_service = None
+
+def _init_conversation_service():
+    """ConversationServiceの遅延初期化"""
+    global _conversation_service
+    if _conversation_service is not None:
+        return _conversation_service
+    
+    if not settings.COSMOS_DB_ENABLED:
+        logger.info("Cosmos DB is disabled. Conversation history will not be persisted.")
+        return None
+    
+    try:
+        from app.repositories.cosmos_repository import CosmosRepository
+        from app.services.conversation_service import ConversationService
+        
+        repo = CosmosRepository(
+            endpoint=settings.AZURE_COSMOS_ENDPOINT,
+            database_name=settings.AZURE_COSMOS_DATABASE,
+            container_name=settings.AZURE_COSMOS_CONTAINER,
+            connection_string=settings.AZURE_COSMOS_CONNECTION_STRING,
+        )
+        _conversation_service = ConversationService(repository=repo)
+        logger.info("ConversationService initialized successfully")
+        return _conversation_service
+    except Exception as e:
+        logger.warning(f"Failed to initialize ConversationService: {e}. Continuing without conversation history.")
+        return None
 
 
 def get_search_service():
@@ -91,6 +146,8 @@ def get_search_service():
             status_code=500, detail="SearchService not initialized"
         )
     return _search_service
+
+
 def get_agent_service():
     """FoundryAgentService依存性注入"""
     if not _agent_service:
@@ -109,6 +166,9 @@ def get_query_expansion_service():
     return _query_expansion_service
 
 
+def get_conversation_service():
+    """ConversationService依存性注入（オプショナル）"""
+    return _init_conversation_service()
 
 
 @router.get("/health", response_model=RAGHealthResponse)
@@ -120,6 +180,7 @@ async def health_check(
     """RAG システム Health Check"""
     search_status = "unknown"
     openai_status = "unknown"
+    cosmos_status = "disabled"
     
     # Search サービス確認
     try:
@@ -139,6 +200,15 @@ async def health_check(
     except Exception as e:
         openai_status = f"unhealthy: {str(e)[:50]}"
         logger.error(f"OpenAI health check failed: {e}")
+    
+    # Cosmos DB確認
+    conv_service = get_conversation_service()
+    if conv_service:
+        try:
+            cosmos_health = conv_service.health_check()
+            cosmos_status = cosmos_health.get("status", "unknown")
+        except Exception as e:
+            cosmos_status = f"unhealthy: {str(e)[:50]}"
     
     overall = "healthy" if search_status == "healthy" and openai_status == "healthy" else "degraded"
     
@@ -277,7 +347,7 @@ async def rag_chat(
         ]
         
         # Step 5: LLM呼び出し
-        response = agent_service.chat(
+        response = agent_service.chat_with_messages(
             messages=messages,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
@@ -307,6 +377,172 @@ async def rag_chat(
         raise
     except Exception as e:
         logger.error(f"RAG chat error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/with-history", response_model=ChatWithHistoryResponse)
+async def rag_chat_with_history(
+    request: ChatWithHistoryRequest,
+    search_service: SearchService = Depends(get_search_service),
+    agent_service: FoundryAgentService = Depends(get_agent_service),
+    query_expansion_service: QueryExpansionService = Depends(get_query_expansion_service),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    RAG Chat with Conversation History（D24新規追加）
+    
+    会話履歴を含むマルチターン対話をサポート。
+    Cosmos DBが有効な場合、会話履歴が永続化される。
+    """
+    try:
+        logger.info(f"RAG chat with history: message='{request.message[:50]}...', session_id={request.session_id}")
+        
+        conv_service = get_conversation_service()
+        
+        # Step 0: セッション管理
+        session_id = request.session_id
+        history_messages = []
+        turn_number = 1
+        
+        if conv_service:
+            session_id = conv_service.get_or_create_session(request.session_id)
+            
+            # 履歴取得
+            if request.include_history and request.max_history_turns > 0:
+                history_messages = conv_service.get_context_messages(
+                    session_id=session_id,
+                    max_turns=request.max_history_turns,
+                )
+            
+            turn_number = conv_service.get_turn_count(session_id) + 1
+        else:
+            # Cosmos DB無効時はセッションIDを生成のみ
+            if not session_id:
+                from uuid import uuid4
+                session_id = f"sess_{uuid4().hex[:12]}"
+        
+        # Step 1: Query Expansion
+        expanded_queries = [request.message]
+        if request.use_query_expansion:
+            expanded_queries = query_expansion_service.expand_query(
+                request.message,
+                max_expansions=3
+            )
+        
+        # Step 2: 検索
+        all_search_results = []
+        for query in expanded_queries:
+            query_embedding = agent_service.get_embedding(query)
+            if not query_embedding:
+                continue
+            
+            results = search_service.hybrid_search(
+                query=query,
+                embedding=query_embedding,
+                top_k=request.top_k // len(expanded_queries),
+                filter_expression=request.filter,
+            )
+            all_search_results.extend(results)
+        
+        # 重複排除 + スコアソート
+        unique_results = {}
+        for doc in all_search_results:
+            doc_id = doc.get("id", "")
+            if doc_id not in unique_results or doc.get("score", 0) > unique_results[doc_id].get("score", 0):
+                unique_results[doc_id] = doc
+        
+        search_results = sorted(
+            unique_results.values(),
+            key=lambda x: x.get("score", 0),
+            reverse=True
+        )[:request.top_k]
+        
+        # Step 3: コンテキスト構築
+        if search_results:
+            context_parts = []
+            for i, doc in enumerate(search_results, 1):
+                title = doc.get("title", "Untitled")
+                content = doc.get("content", "")
+                context_parts.append(f"【ソース{i}: {title}】\n{content}")
+            context_text = "\n\n---\n\n".join(context_parts)
+        else:
+            context_text = "（関連するコンテキストが見つかりませんでした）"
+        
+        # Step 4: メッセージ構築（履歴含む）
+        system_prompt = request.system_prompt or (
+            MULTI_TURN_SYSTEM_PROMPT if history_messages else DEFAULT_RAG_SYSTEM_PROMPT
+        )
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # 会話履歴を追加
+        messages.extend(history_messages)
+        
+        # 現在の質問とコンテキスト
+        user_message = f"""以下のコンテキストを参照して、質問に回答してください。
+
+【コンテキスト】
+{context_text}
+
+【質問】
+{request.message}"""
+        
+        messages.append({"role": "user", "content": user_message})
+        
+        # Step 5: LLM呼び出し
+        response = agent_service.chat_with_messages(
+            messages=messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+        
+        answer = response.get("content", "")
+        
+        # Step 6: 会話履歴に保存
+        if conv_service:
+            try:
+                sources_dict = [
+                    {"id": doc.get("id", ""), "title": doc.get("title", ""), "score": doc.get("score", 0.0)}
+                    for doc in search_results
+                ]
+                conv_service.add_turn(
+                    session_id=session_id,
+                    user_message=request.message,
+                    assistant_message=answer,
+                    sources=sources_dict,
+                    metadata={
+                        "model": settings.AZURE_OPENAI_DEPLOYMENT_CHAT,
+                        "sources_count": len(search_results),
+                        "query_expansion": request.use_query_expansion,
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save conversation turn: {e}")
+        
+        # Step 7: レスポンス構築
+        sources = [
+            SourceInfo(
+                id=doc.get("id", ""),
+                title=doc.get("title", ""),
+                score=doc.get("score", 0.0),
+            )
+            for doc in search_results
+        ]
+        
+        return ChatWithHistoryResponse(
+            answer=answer,
+            session_id=session_id,
+            turn_number=turn_number,
+            sources=sources,
+            context_used=len(search_results),
+            history_used=len(history_messages) // 2,
+            model=settings.AZURE_OPENAI_DEPLOYMENT_CHAT,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"RAG chat with history error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -369,7 +605,7 @@ async def rag_chat_stream(
             yield f"data: {json.dumps(sources_data, ensure_ascii=False)}\n\n"
             
             # ストリーミング
-            stream = agent_service.chat(
+            stream = agent_service.chat_with_messages(
                 messages=messages,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,

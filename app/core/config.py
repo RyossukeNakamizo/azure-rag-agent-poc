@@ -1,5 +1,8 @@
 """Application Configuration"""
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import Optional
@@ -52,10 +55,32 @@ class Settings(BaseSettings):
         description="Azure AI Search SKU"
     )
     
+    # Azure Cosmos DB (D24追加)
+    AZURE_COSMOS_ENDPOINT: str = Field(
+        default="",
+        description="Azure Cosmos DB Endpoint"
+    )
+    AZURE_COSMOS_DATABASE: str = Field(
+        default="rag-conversations",
+        description="Azure Cosmos DB Database Name"
+    )
+    AZURE_COSMOS_CONTAINER: str = Field(
+        default="conversations",
+        description="Azure Cosmos DB Container Name"
+    )
+    AZURE_COSMOS_CONNECTION_STRING: Optional[str] = Field(
+        default=None,
+        description="Azure Cosmos DB Connection String (optional, for local dev)"
+    )
+    COSMOS_DB_ENABLED: bool = Field(
+        default=False,
+        description="Enable Cosmos DB for conversation history"
+    )
+    
     # API Settings
     API_V1_PREFIX: str = "/api"
     PROJECT_NAME: str = "Azure RAG Agent POC"
-    VERSION: str = "0.2.0"
+    VERSION: str = "0.3.0"  # D24: Cosmos DB統合
     
     # Logging
     LOG_LEVEL: str = Field(

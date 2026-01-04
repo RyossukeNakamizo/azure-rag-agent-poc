@@ -72,3 +72,7 @@ evaluation/flow/.env
 evaluation/flow/test_*.jsonl
 evaluation/flow/results_*
 .promptflow/
+# Evaluation results
+reports/
+evaluation/results/
+evaluation_results/

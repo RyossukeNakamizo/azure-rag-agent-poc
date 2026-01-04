@@ -120,3 +120,39 @@ class FoundryAgentService:
     def get_available_tools(self) -> list[dict]:
         """利用可能なツール一覧（現在は空）"""
         return []
+
+    def chat_with_messages(
+        self,
+        messages: list[dict],
+        temperature: float = 0.7,
+        max_tokens: int = 1000
+    ) -> dict:
+        """
+        メッセージリストを使用したチャット（マルチターン対応）
+        
+        Args:
+            messages: [{"role": "system"|"user"|"assistant", "content": "..."}] のリスト
+            temperature: 生成温度
+            max_tokens: 最大トークン数
+            
+        Returns:
+            {"content": "応答テキスト", "usage": {...}}
+        """
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.deployment,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return {
+                "content": response.choices[0].message.content,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+            }
+        except Exception as e:
+            logger.error(f"Chat with messages error: {e}")
+            raise
