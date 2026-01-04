@@ -299,3 +299,70 @@
 - 目標データ: 100件以上
 - 推定拡充時間: 2-3日（品質チェック込み）
 - D21残り時間: 実質0.5日
+
+---
+
+### Query Expansion Pattern A
+
+**Category**: Feature
+
+**Considered For**: Relevance改善（0.780 → 0.850目標）
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Performance Impact | High | 1/5 | All metrics degraded (-3.2% to -4.8%) |
+| Cost Efficiency | High | 2/5 | +$0.001/query with negative ROI |
+| Implementation Complexity | Medium | 3/5 | QueryExpansionService + parallel search |
+| Maintainability | High | 2/5 | Added failure points |
+| Baseline Quality | High | 5/5 | Relevance 0.888 already exceeds 0.850 |
+
+**Final Verdict**: 却下 - 全メトリクスで劣化、Baselineが既に高品質
+
+**Revisit Trigger**: 
+- Baseline Relevance drops below 0.850
+- New expansion algorithms become available
+- Cost drops to $0.0001/query or lower
+
+---
+
+### Query Expansion Pattern B (Intent Decomposition)
+
+**Category**: Feature
+
+**Considered For**: Pattern A代替案
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Potential Effectiveness | Medium | 2/5 | Pattern A failed, B likely similar |
+| Implementation Cost | High | 1/5 | 2-3 days, high complexity |
+| Risk | High | 1/5 | Uncertain benefit |
+| Urgency | Low | N/A | Baseline meets requirements |
+
+**Final Verdict**: 却下 - Pattern A失敗により正当化困難
+
+**Revisit Trigger**: Research shows Pattern B >10% improvement
+
+---
+
+### Azure AI Search Semantic Ranker
+
+**Category**: Service Feature
+
+**Considered For**: Relevance & Groundedness改善
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Cost | High | 2/5 | $175/month fixed |
+| Effectiveness | Medium | 4/5 | Typically +5-10% Relevance |
+| Implementation | Low | 5/5 | Config-only, 15 minutes |
+| Current Need | Low | N/A | Baseline sufficient |
+
+**Final Verdict**: 保留 - 現状不要、将来の選択肢として維持
+
+**Revisit Trigger**: 
+- Monthly queries > 175,000
+- Groundedness becomes critical (>0.850)
+- Budget approval for $175/month
