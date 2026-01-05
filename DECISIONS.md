@@ -572,3 +572,102 @@ scripts/quick_e2e_test.py      # 手動実行用簡易スクリプト
 ```
 
 ---
+# Decision Log - D26 Update
+
+> D26: Bicep RBAC自動化の技術選定記録
+
+---
+
+## 2026-01-05: RBAC自動化アーキテクチャ（D26）
+
+**Status**: Accepted
+
+**Context**
+- 新規開発者のオンボーディング時に手動で`az role assignment create`を複数回実行していた
+- ヒューマンエラーによる権限設定ミスのリスク
+- 環境（dev/stg/prod）間での一貫性確保が困難
+
+**Decision**
+- Bicepモジュール化によるRBAC自動化を採用
+- `infra/modules/rbac-assignments.bicep`として再利用可能なモジュールを作成
+- シェルスクリプト`scripts/assign-rbac.sh`でラップして簡易実行
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Azure CLI スクリプト | シンプル、即実行可能 | べき等性なし、エラー処理が手動 | 再実行時の重複エラー |
+| Terraform | マルチクラウド対応 | 学習コスト、状態管理必要 | Azure専用プロジェクト |
+| ARM Template | 公式サポート | 冗長、可読性低 | 保守性が低い |
+| Azure Policy | 自動適用、監査機能 | 複雑、オーバーエンジニアリング | 開発フェーズに過剰 |
+
+**Consequences**
+- 開発者オンボーディングが1コマンドで完了（約30秒）
+- What-if確認による安全なデプロイ
+- Bicepのべき等性により再実行が安全
+
+**Validation**
+- `az deployment group what-if`で変更プレビュー確認
+- 実際のロール割り当て後、アプリケーション動作確認
+
+---
+
+## 2026-01-05: Cosmos DB RBACのSQL Role Assignment使用（D26）
+
+**Status**: Accepted
+
+**Context**
+- Cosmos DBのデータプレーンアクセスには専用のSQL Role Assignmentが必要
+- 通常のAzure RBACとは異なるリソースタイプ
+
+**Decision**
+- `Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments`リソースを使用
+- Built-in Role ID `00000000-0000-0000-0000-000000000002`（Data Contributor）を適用
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Azure RBAC (Cosmos DB Account Contributor) | 標準的なRBAC | コントロールプレーンのみ、データアクセス不可 | データ操作できない |
+| カスタムSQL Role Definition | 細かい権限制御 | 作成・管理が複雑 | Built-inで十分 |
+| Connection String認証 | 実装が簡単 | セキュリティリスク、Managed Identity非対応 | セキュリティ要件違反 |
+
+**Consequences**
+- Managed Identity認証でCosmos DBデータアクセス可能
+- 条件付きデプロイにより、Cosmos DB無効時はスキップ
+
+**Validation**
+- `COSMOS_DB_ENABLED=true`でのヘルスチェック正常動作確認済み（D25）
+
+---
+
+## 2026-01-05: モジュール分離パターン（D26）
+
+**Status**: Accepted
+
+**Context**
+- RBACロジックを既存のmain.bicepに追加するか、別モジュールにするか
+- 将来的に他プロジェクトでも再利用したい
+
+**Decision**
+- `infra/modules/rbac-assignments.bicep`として独立モジュール化
+- `infra/assign-rbac.bicep`から呼び出す2層構造
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| main.bicepに統合 | ファイル数削減 | 肥大化、再利用困難 | 関心の分離違反 |
+| 単一ファイル | シンプル | 再利用性なし | 他プロジェクトで使いたい |
+| Azure Verified Modules (AVM) | 標準化済み | 外部依存、カスタマイズ困難 | プロジェクト固有要件あり |
+
+**Consequences**
+- モジュールの独立テストが可能
+- 他プロジェクトへのコピー&ペーストで再利用可能
+- 将来的にAzure Verified Modules形式への移行も容易
+
+**Validation**
+- `az bicep build`でコンパイルエラーなし確認
+
+---
+
+# 以下は既存のDecision Records（省略せず含める）
+
+<!-- D25以前の記録は実際のファイルから継続 -->

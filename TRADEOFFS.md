@@ -596,3 +596,131 @@
 **Revisit Trigger**: なし
 
 ---
+# Tradeoff Analysis - D26 Update
+
+> D26: Bicep RBAC自動化で却下したオプション
+
+---
+
+## Azure CLI スクリプト（シェルスクリプトのみ）
+
+**Category**: Tooling
+
+**Considered For**: RBAC自動割り当て
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Idempotency | High | 1/5 | 既存ロールで重複エラー |
+| Error Handling | High | 2/5 | 手動でtry-catch相当の実装必要 |
+| Maintainability | Medium | 3/5 | バージョン管理は可能だが変更追跡困難 |
+| Azure Integration | High | 3/5 | ネイティブだがWhat-if機能なし |
+
+**Final Verdict**: Bicepのべき等性とWhat-if機能がCLI単体より優れる
+
+**Revisit Trigger**: 極めてシンプルな1回限りのスクリプトが必要な場合
+
+---
+
+## Terraform
+
+**Category**: IaC Framework
+
+**Considered For**: RBAC自動化およびインフラ全体
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Learning Curve | Medium | 2/5 | HCL学習コスト |
+| State Management | High | 2/5 | tfstate管理が追加作業 |
+| Azure Native | High | 3/5 | AzureRMプロバイダーは安定だが1-2週遅れ |
+| Team Skill | High | 2/5 | チームにTerraform経験者少ない |
+
+**Final Verdict**: Azure専用プロジェクトではBicepの方がシームレス
+
+**Revisit Trigger**: マルチクラウド対応が必要な場合、またはTerraform経験者が多いチーム構成
+
+---
+
+## Azure Policy
+
+**Category**: Governance
+
+**Considered For**: RBAC自動適用
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Complexity | High | 1/5 | 設計・デバッグが困難 |
+| Flexibility | Medium | 2/5 | 条件式の制約 |
+| Development Phase | High | 1/5 | ガバナンスは本番移行後で十分 |
+| Audit Trail | Low | 5/5 | 優秀だが現時点で過剰 |
+
+**Final Verdict**: 開発フェーズにおいてオーバーエンジニアリング
+
+**Revisit Trigger**: 本番環境でのコンプライアンス要件、大規模チームでの統制が必要な場合
+
+---
+
+## Azure RBAC (Cosmos DB Account Contributor)
+
+**Category**: Security / Access Control
+
+**Considered For**: Cosmos DBデータアクセス
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Data Plane Access | Critical | 0/5 | コントロールプレーンのみ、データ操作不可 |
+| Managed Identity | High | 1/5 | データアクセスにはSQL Role必須 |
+| Security | High | N/A | 根本的に目的を達成できない |
+
+**Final Verdict**: Cosmos DBのデータアクセスには`sqlRoleAssignments`が必須
+
+**Revisit Trigger**: なし（技術的に不可能なため）
+
+---
+
+## カスタムSQL Role Definition（Cosmos DB）
+
+**Category**: Security / Access Control
+
+**Considered For**: Cosmos DB細粒度アクセス制御
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Complexity | High | 2/5 | ロール定義の作成・管理が複雑 |
+| Maintenance | Medium | 2/5 | 権限変更時の更新作業 |
+| Value Add | Medium | 3/5 | 開発フェーズでは過剰な細分化 |
+| Built-in Availability | High | 4/5 | Built-in Data Contributorで十分 |
+
+**Final Verdict**: Built-in Roleで必要十分な権限が付与される
+
+**Revisit Trigger**: 最小権限の原則を厳密に適用する本番環境、マルチテナント構成
+
+---
+
+## 単一Bicepファイル（モジュール分離なし）
+
+**Category**: Architecture
+
+**Considered For**: RBAC Bicep構成
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Reusability | High | 2/5 | 他プロジェクトへの転用困難 |
+| Testability | Medium | 2/5 | 部分テストが困難 |
+| File Size | Low | 3/5 | 許容範囲だが肥大化傾向 |
+| Separation of Concerns | High | 2/5 | リソース作成とRBACが混在 |
+
+**Final Verdict**: モジュール分離により再利用性と保守性を確保
+
+**Revisit Trigger**: 極めて小規模なプロジェクト（リソース2-3個程度）
+
+---
+
+# 以下は既存のTradeoff Records（省略せず含める）
+
+<!-- D25以前の記録は実際のファイルから継続 -->

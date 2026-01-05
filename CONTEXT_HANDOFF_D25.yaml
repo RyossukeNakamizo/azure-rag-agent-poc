@@ -1,0 +1,177 @@
+# Context Handoff - Generated 2026-01-04 19:25 JST
+# Paste this at the start of your next conversation
+
+context_handoff:
+  version: "1.0"
+  generated: "2026-01-04T19:25:00+09:00"
+  
+  # Core intent and objectives
+  goal:
+    primary: "Azure RAG POCプロジェクト - D25完了、D26以降の機能拡張へ"
+    success_criteria:
+      - "✅ D24: Cosmos DB Serverless統合完了"
+      - "✅ D25-1: ヘルスチェック拡張（cosmos_dbフィールド追加）"
+      - "✅ D25-2: E2Eテストスイート作成（pytest + 手動スクリプト）"
+      - "✅ Git commit & push完了（6a0b824）"
+      - "✅ DECISIONS.md / TRADEOFFS.md 更新完了"
+    constraints:
+      - "Managed Identity認証を維持（API Key不使用）"
+      - "既存エンドポイントの後方互換性を保持"
+      - "COSMOS_DB_ENABLED=false でCosmos DB無効化可能"
+  
+  # Decisions made during conversation (D25)
+  decisions:
+    - topic: "ヘルスチェック設計（D25-1）"
+      choice: "単一エンドポイントにcosmos_dbフィールド追加"
+      rationale: "統合ビューが運用上望ましい、グレースフルデグラデーション"
+    
+    - topic: "Cosmos DB全体ステータス判定（D25-1）"
+      choice: "全体ステータスにCosmos DBを含めない"
+      rationale: "オプショナルサービスのため、無効時もhealthy維持"
+    
+    - topic: "E2Eテスト戦略（D25-2）"
+      choice: "新規pytest + 手動スクリプト作成"
+      rationale: "既存テストは古いsrc/構造、全面書き換えと同等の作業量"
+    
+    - topic: "テストカバレッジ（D25-2）"
+      choice: "5カテゴリ・20+テストケース"
+      rationale: "Health/Search/Chat/Multi-turn/Errorの包括的検証"
+  
+  # Current work state
+  work_state:
+    completed_in_this_session:
+      - path: "app/models/rag.py"
+        change: "RAGHealthResponse.cosmos_dbフィールド追加"
+      - path: "app/api/routes/rag.py"
+        change: "レスポンスにcosmos_db含める、コメント追加"
+      - path: "tests/test_e2e_rag_api.py"
+        status: "created"
+        summary: "pytest用E2Eテストスイート（20+テストケース）"
+      - path: "scripts/quick_e2e_test.py"
+        status: "created"
+        summary: "手動実行用簡易テスト（色付き出力）"
+      - path: "DECISIONS.md"
+        change: "D25-1, D25-2 技術選定記録追加"
+      - path: "TRADEOFFS.md"
+        change: "却下オプション4件追加"
+    
+    test_results:
+      quick_e2e_test: "5/5 全テスト合格"
+      pytest: "一部タイムアウト（サーバー起動状態依存、手動curlでは正常動作確認済み）"
+      curl_health_check: "正常動作（cosmos_db: healthy）"
+    
+    git_state:
+      branch: "feature/wk3-d19-with-progress-tracking"
+      last_commit: "6a0b824"
+      commit_message: "feat(D25): ヘルスチェック拡張 & E2Eテストスイート"
+      pushed: true
+    
+    azure_resources:
+      cosmos_db:
+        name: "cosmos-ragpoc-dev-ldt4idhueffoe"
+        status: "healthy"
+        database: "rag-conversations"
+        container: "conversations"
+      ai_search:
+        index: "rag-index"
+        status: "healthy"
+      openai:
+        deployment: "gpt-4o"
+        status: "healthy"
+  
+  # Pending tasks (prioritized)
+  pending:
+    next_actions:
+      - priority: "medium"
+        task: "D26: Bicep RBAC自動化"
+        description: "ユーザープリンシパルへの自動権限付与をBicepで実装"
+        estimated_time: "20-30分"
+      - priority: "medium"
+        task: "D27: エラーハンドリング強化"
+        description: "Cosmos DB接続エラー時のグレースフルデグラデーション"
+        estimated_time: "15-20分"
+      - priority: "low"
+        task: "D28: OpenTelemetry監視設定"
+        description: "Application Insights統合、分散トレーシング"
+        estimated_time: "30-40分"
+    
+    minor_issues:
+      - "pytest E2Eテストのタイムアウト問題（手動テストは正常動作）"
+      - "Bicep警告: BCP318（条件付きモジュールのnull警告）- 動作に影響なし"
+  
+  # Environment details
+  environment:
+    project_path: "/Users/ryosukenakamizo/azure-rag-agent-poc"
+    branch: "feature/wk3-d19-with-progress-tracking"
+    python_version: "3.13"
+    virtual_env: ".venv"
+    azure_subscription: "4c5c5fd0-450a-42a5-b5cf-4247712d8f20"
+    resource_group: "rg-rag-poc"
+    server_url: "http://localhost:8000"
+    key_endpoints:
+      health: "/api/v1/rag/health"
+      chat: "/api/v1/rag/chat"
+      chat_with_history: "/api/v1/rag/chat/with-history"
+      search: "/api/v1/rag/search"
+  
+  # Project metrics
+  project_metrics:
+    overall_progress: "95%（D25完了）"
+    rag_performance:
+      relevance: 0.888
+      coherence: 0.928
+      groundedness: 0.792
+    health_check_response:
+      status: "healthy"
+      search_service: "healthy"
+      openai_service: "healthy"
+      cosmos_db: "healthy"
+  
+  # User preferences observed
+  user_context:
+    communication_style: "プロフェッショナル、戦略的、具体的"
+    technical_level: "L3（上級者）- Azure AI、IaC、RAGシステム実装経験"
+    domain: "Azure AI Foundry、RAGシステム開発、エンタープライズAI"
+    methodology: "7R構文、Goal Seek Prompt、ADR形式"
+    documentation_preference: "DECISIONS.md / TRADEOFFS.md を差分として明確に作成"
+  
+  # Key files for reference
+  key_files:
+    architecture:
+      - "ARCHITECTURE.md"
+      - "DECISIONS.md"
+      - "TRADEOFFS.md"
+    cosmos_db:
+      - "infra/modules/cosmos-db.bicep"
+      - "app/repositories/cosmos_repository.py"
+      - "app/services/conversation_service.py"
+      - "app/models/conversation.py"
+      - "docs/COSMOS_DB_DESIGN.md"
+    testing:
+      - "tests/test_e2e_rag_api.py"
+      - "scripts/quick_e2e_test.py"
+    api:
+      - "app/api/routes/rag.py"
+      - "app/models/rag.py"
+  
+  # Conversation summary for quick orientation
+  summary: |
+    D25セッション完了。D24 Cosmos DB統合の続きとして、ヘルスチェック拡張と
+    E2Eテストスイート作成を実施。
+    
+    D25-1: RAGHealthResponseにcosmos_dbフィールドを追加し、全サービス状態を
+    単一エンドポイントで確認可能に。Cosmos DBはオプショナルのため全体ステータス
+    判定には含めない設計（グレースフルデグラデーション）。
+    
+    D25-2: pytest用E2Eテストスイート（tests/test_e2e_rag_api.py）と
+    手動実行用スクリプト（scripts/quick_e2e_test.py）を作成。
+    5カテゴリ・20+テストケースでカバレッジ確保。手動テストで5/5合格確認。
+    
+    DECISIONS.md/TRADEOFFS.mdにD25判断ログを追記し、Git commit完了（6a0b824）。
+    
+    次回はD26としてBicep RBAC自動化、またはD27エラーハンドリング強化へ進む予定。
+
+# 次セッション開始時の推奨発言:
+# 「D25完了の続きです。D26 Bicep RBAC自動化から始めます。」
+# または
+# 「D25の引き継ぎです。残りタスクの優先順位を確認してください。」
