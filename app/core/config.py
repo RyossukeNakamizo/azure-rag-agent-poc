@@ -77,10 +77,20 @@ class Settings(BaseSettings):
         description="Enable Cosmos DB for conversation history"
     )
     
+    # Application Insights (D28追加)
+    APPLICATIONINSIGHTS_CONNECTION_STRING: Optional[str] = Field(
+        default=None,
+        description="Application Insights Connection String for OpenTelemetry"
+    )
+    OTEL_ENABLED: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing"
+    )
+    
     # API Settings
     API_V1_PREFIX: str = "/api"
     PROJECT_NAME: str = "Azure RAG Agent POC"
-    VERSION: str = "0.3.0"  # D24: Cosmos DB統合
+    VERSION: str = "0.5.0"  # D28: OpenTelemetry Monitoring
     
     # Logging
     LOG_LEVEL: str = Field(

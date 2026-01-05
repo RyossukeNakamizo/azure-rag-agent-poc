@@ -1,45 +1,55 @@
 """
-Azure RAG Agent POC - FastAPI Application
+Azure RAG Agent POC - Main Application
 
-Main application entry point
+FastAPI application entry point with RAG endpoints.
+D28: OpenTelemetry統合
 """
-
-from dotenv import load_dotenv
-load_dotenv()
-
 import logging
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.core.config import settings
-from app.api.routes import chat, health, tools, rag
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# ロギング設定
+from app.core.config import get_settings
+from app.core.telemetry import configure_telemetry
+from app.api.routes import rag, health, chat, tools
+
+settings = get_settings()
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """アプリケーションライフサイクル管理"""
-    logger.info("Application startup")
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    logger.info(f"Cosmos DB enabled: {settings.COSMOS_DB_ENABLED}")
+    
+    if settings.OTEL_ENABLED:
+        telemetry_configured = configure_telemetry()
+        logger.info(f"OpenTelemetry configured: {telemetry_configured}")
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            FastAPIInstrumentor.instrument_app(app)
+            logger.info("FastAPI instrumented with OpenTelemetry")
+        except ImportError:
+            logger.warning("FastAPIInstrumentor not available")
+    else:
+        logger.info("OpenTelemetry disabled")
+    
     yield
-    logger.info("Application shutdown")
+    logger.info("Shutting down application")
 
 
-# FastAPI アプリケーション
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    lifespan=lifespan
+    description="Azure AI Search + OpenAI RAG POC",
+    lifespan=lifespan,
 )
 
-# CORS 設定
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,17 +58,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ルーター登録
-app.include_router(health.router, prefix=settings.API_V1_PREFIX, tags=["health"])
-app.include_router(tools.router, prefix=settings.API_V1_PREFIX, tags=["tools"])
-app.include_router(chat.router, prefix=settings.API_V1_PREFIX, tags=["chat"])
-app.include_router(rag.router, prefix="/api/v1/rag", tags=["rag"])
+app.include_router(health.router, prefix="/api/v1", tags=["Health"])
+app.include_router(rag.router, prefix="/api/v1/rag", tags=["RAG"])
+app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+app.include_router(tools.router, prefix="/api/v1/tools", tags=["Tools"])
+
 
 @app.get("/")
 async def root():
-    """ルートエンドポイント"""
-    return {
-        "message": "Azure RAG Agent POC API",
-        "version": settings.VERSION,
-        "docs": "/docs"
-    }
+    return {"name": settings.PROJECT_NAME, "version": settings.VERSION, "status": "running"}
