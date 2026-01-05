@@ -3,6 +3,7 @@ RAG API Schemas
 
 Phase 2-3: RAG エンドポイント用 Pydantic モデル定義
 D22-1: Query Expansion対応
+D27: エラーハンドリング強化 - ヘルスチェック詳細化
 """
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -64,13 +65,37 @@ class RAGChatResponse(BaseModel):
     )
 
 
+class ServiceHealth(BaseModel):
+    """個別サービスのヘルス情報"""
+    status: str = Field(..., description="healthy/unhealthy/disabled")
+    message: Optional[str] = Field(default=None, description="詳細メッセージ")
+    is_optional: bool = Field(default=False, description="オプショナルサービスか")
+
+
 class RAGHealthResponse(BaseModel):
-    """RAG Health Check レスポンス"""
-    status: str = Field(..., description="ステータス")
+    """
+    RAG Health Check レスポンス
+    
+    D27: グレースフルデグラデーション対応
+    - status: healthy (全コア機能正常) / degraded (オプション機能障害) / unhealthy (コア機能障害)
+    - オプショナルサービス（Cosmos DB）の障害は degraded として扱う
+    """
+    status: str = Field(
+        ...,
+        description="全体ステータス: healthy/degraded/unhealthy"
+    )
     search_service: str = Field(..., description="Search サービス状態")
     index_name: str = Field(..., description="使用インデックス名")
     openai_service: str = Field(..., description="OpenAI サービス状態")
     cosmos_db: str = Field(
         default="disabled",
-        description="Cosmos DB サービス状態（disabled/healthy/unhealthy）"
+        description="Cosmos DB サービス状態: disabled/healthy/unhealthy"
+    )
+    degraded_services: Optional[list[str]] = Field(
+        default=None,
+        description="障害が発生しているオプショナルサービス一覧"
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="ステータス詳細メッセージ"
     )

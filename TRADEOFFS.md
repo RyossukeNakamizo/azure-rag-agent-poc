@@ -721,6 +721,86 @@
 
 ---
 
+## Circuit Breakerパターン
+
+**Category**: Architecture Pattern
+
+**Considered For**: D27 エラーハンドリング
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Complexity | High | 2/5 | 状態管理、タイムアウト、半開状態が必要 |
+| Library Dependency | Medium | 2/5 | resilience4j等の外部ライブラリ依存 |
+| Testing | Medium | 2/5 | 状態遷移テストが複雑 |
+| Value for POC | High | 2/5 | POC規模ではオーバーエンジニアリング |
+
+**Final Verdict**: シンプルなグレースフルデグラデーションで十分
+
+**Revisit Trigger**: 本番環境での高頻度な一時的エラー発生、マイクロサービスアーキテクチャへの移行
+
+---
+
+## Retry with Exponential Backoff
+
+**Category**: Resilience Pattern
+
+**Considered For**: D27 Cosmos DB接続エラーハンドリング
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Latency Impact | High | 2/5 | リトライごとにレスポンス時間増加 |
+| Infinite Loop Risk | Medium | 1/5 | 永続的エラー時のリスク |
+| Complexity | Low | 3/5 | 実装自体はシンプル |
+| Value for Optional Service | High | 2/5 | オプショナルサービスには過剰 |
+
+**Final Verdict**: オプショナルサービスにはスキップフォールバックが適切
+
+**Revisit Trigger**: Cosmos DBがコアサービスに昇格した場合、ネットワーク不安定環境
+
+---
+
+## Fail Fast Pattern
+
+**Category**: Error Handling Pattern
+
+**Considered For**: D27 エラーハンドリング
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| User Experience | High | 1/5 | オプショナル機能で全体エラーはUX悪化 |
+| Core Functionality | High | 1/5 | RAG検索・回答生成も停止してしまう |
+| Simplicity | Low | 5/5 | 実装は最もシンプル |
+| Debugging | Medium | 4/5 | エラー原因が明確 |
+
+**Final Verdict**: オプショナルサービスのエラーでコア機能を停止させるのは不適切
+
+**Revisit Trigger**: Cosmos DBがコアサービスに昇格した場合
+
+---
+
+## 単純Booleanフラグによる状態管理
+
+**Category**: Implementation Pattern
+
+**Considered For**: D27 接続状態管理
+
+**Rejection Factors**
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| State Clarity | High | 2/5 | 「False」が未接続かエラーか不明 |
+| Debugging | High | 2/5 | ログでの原因特定が困難 |
+| Future Extension | Medium | 2/5 | 状態追加時に破綻的変更 |
+| Simplicity | Low | 5/5 | 最もシンプル |
+
+**Final Verdict**: Enumによる明示的な状態管理が保守性で優位
+
+**Revisit Trigger**: 極めてシンプルなスクリプト・ツール用途
+
+---
+
 # 以下は既存のTradeoff Records（省略せず含める）
 
 <!-- D25以前の記録は実際のファイルから継続 -->

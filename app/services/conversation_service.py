@@ -2,6 +2,7 @@
 Conversation Service
 
 D24: 会話管理ビジネスロジック
+D27: エラーハンドリング強化 - グレースフルデグラデーション対応
 """
 import logging
 from typing import Optional
@@ -23,6 +24,11 @@ class ConversationService:
     """
     会話管理サービス
     
+    D27強化ポイント:
+    - リポジトリ操作失敗時のフォールバック動作
+    - 一貫したエラーハンドリング
+    - サービス利用可否の明示的管理
+    
     セッション管理、履歴取得、メッセージ保存を担当。
     """
     
@@ -36,6 +42,11 @@ class ConversationService:
         self._repo = repository
         logger.info("ConversationService initialized")
     
+    @property
+    def is_available(self) -> bool:
+        """サービスが利用可能かどうか"""
+        return self._repo.is_available
+    
     # =========================================================================
     # Session Management
     # =========================================================================
@@ -43,6 +54,8 @@ class ConversationService:
     def start_new_session(self, user_id: Optional[str] = None) -> str:
         """
         新しいセッションを開始
+        
+        D27: リポジトリ障害時もセッションIDを返す（履歴なしモード）
         
         Args:
             user_id: ユーザーID（オプション）
@@ -55,14 +68,18 @@ class ConversationService:
             title="New Conversation",
         )
         
-        try:
+        # リポジトリが利用可能なら永続化を試行
+        if self._repo.is_available:
             session_id = self._repo.create_session_sync(session)
-            logger.info(f"Started new session: {session_id}")
-            return session_id
-        except Exception as e:
-            logger.error(f"Failed to start session: {e}")
-            # セッション作成に失敗してもIDは返す（履歴なし動作を許容）
-            return session.id
+            if session_id:
+                logger.info(f"Started new session (persisted): {session_id}")
+                return session_id
+            else:
+                logger.warning(f"Failed to persist session, using transient ID: {session.id}")
+        else:
+            logger.info(f"Cosmos DB unavailable, using transient session ID: {session.id}")
+        
+        return session.id
     
     def get_or_create_session(self, session_id: Optional[str] = None, user_id: Optional[str] = None) -> str:
         """
@@ -76,7 +93,6 @@ class ConversationService:
             セッションID
         """
         if session_id:
-            # 既存セッション確認（存在チェックは省略、メッセージ保存時に確認）
             logger.info(f"Using existing session: {session_id}")
             return session_id
         
@@ -94,9 +110,11 @@ class ConversationService:
         sources: Optional[list[dict]] = None,
         metadata: Optional[dict] = None,
         user_id: Optional[str] = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[Optional[str], Optional[str]]:
         """
         会話ターン（ユーザー + アシスタント）を追加
+        
+        D27: 保存失敗時は(None, None)を返し、RAG機能は継続
         
         Args:
             session_id: セッションID
@@ -107,8 +125,12 @@ class ConversationService:
             user_id: ユーザーID
             
         Returns:
-            (user_msg_id, assistant_msg_id)
+            (user_msg_id, assistant_msg_id) - 失敗時は(None, None)
         """
+        if not self._repo.is_available:
+            logger.warning("Cosmos DB unavailable, skipping conversation turn persistence")
+            return (None, None)
+        
         now = datetime.utcnow()
         
         # ユーザーメッセージ
@@ -134,14 +156,15 @@ class ConversationService:
             created_at=now,
         )
         
-        try:
-            user_msg_id = self._repo.create_message_sync(user_msg)
-            assistant_msg_id = self._repo.create_message_sync(assistant_msg)
+        user_msg_id = self._repo.create_message_sync(user_msg)
+        assistant_msg_id = self._repo.create_message_sync(assistant_msg)
+        
+        if user_msg_id and assistant_msg_id:
             logger.info(f"Added turn to session {session_id}: user={user_msg_id}, assistant={assistant_msg_id}")
-            return user_msg_id, assistant_msg_id
-        except Exception as e:
-            logger.error(f"Failed to add turn: {e}")
-            raise
+        else:
+            logger.warning(f"Failed to persist conversation turn for session {session_id}")
+        
+        return (user_msg_id, assistant_msg_id)
     
     def get_context_messages(
         self,
@@ -151,60 +174,72 @@ class ConversationService:
         """
         LLMコンテキスト用のメッセージ履歴を取得
         
+        D27: 取得失敗時は空リストを返す（履歴なしモード）
+        
         Args:
             session_id: セッションID
             max_turns: 最大ターン数（1ターン = user + assistant）
             
         Returns:
-            OpenAI API形式のメッセージリスト
+            OpenAI API形式のメッセージリスト（エラー時は空リスト）
         """
-        try:
-            # 最新のメッセージを取得（max_turns * 2 = user + assistant）
-            messages = self._repo.get_session_history_sync(
-                session_id=session_id,
-                limit=max_turns * 2,
-            )
-            
-            if not messages:
-                return []
-            
-            # 時系列順に並べ替え（古い順）
-            messages = sorted(messages, key=lambda m: m.created_at)
-            
-            # OpenAI形式に変換
-            context = [
-                {"role": msg.role, "content": msg.content}
-                for msg in messages
-            ]
-            
-            logger.info(f"Retrieved {len(context)} context messages for session: {session_id}")
-            return context
-            
-        except Exception as e:
-            logger.error(f"Failed to get context messages: {e}")
+        if not self._repo.is_available:
+            logger.info(f"Cosmos DB unavailable, returning empty history for session: {session_id}")
             return []
+        
+        # 最新のメッセージを取得（max_turns * 2 = user + assistant）
+        messages = self._repo.get_session_history_sync(
+            session_id=session_id,
+            limit=max_turns * 2,
+        )
+        
+        if not messages:
+            return []
+        
+        # 時系列順に並べ替え（古い順）
+        messages = sorted(messages, key=lambda m: m.created_at)
+        
+        # OpenAI形式に変換
+        context = [
+            {"role": msg.role, "content": msg.content}
+            for msg in messages
+        ]
+        
+        logger.info(f"Retrieved {len(context)} context messages for session: {session_id}")
+        return context
     
     def get_turn_count(self, session_id: str) -> int:
         """
         セッションのターン数を取得
         
+        D27: 取得失敗時は0を返す
+        
         Args:
             session_id: セッションID
             
         Returns:
-            ターン数（メッセージ数 / 2）
+            ターン数（メッセージ数 / 2）、エラー時は0
         """
-        try:
-            count = self._repo.get_message_count_sync(session_id)
-            return count // 2
-        except Exception as e:
-            logger.error(f"Failed to get turn count: {e}")
+        if not self._repo.is_available:
             return 0
+        
+        count = self._repo.get_message_count_sync(session_id)
+        return count // 2
     
     # =========================================================================
     # Utility
     # =========================================================================
     
     def health_check(self) -> dict:
-        """ヘルスチェック"""
-        return self._repo.health_check()
+        """
+        ヘルスチェック
+        
+        Returns:
+            ステータス情報
+        """
+        repo_health = self._repo.health_check()
+        
+        return {
+            **repo_health,
+            "service_available": self.is_available,
+        }

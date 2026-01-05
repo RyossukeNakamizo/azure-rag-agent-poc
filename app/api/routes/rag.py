@@ -177,12 +177,20 @@ async def health_check(
     agent_service: FoundryAgentService = Depends(get_agent_service),
     settings: Settings = Depends(get_settings),
 ):
-    """RAG システム Health Check"""
+    """
+    RAG システム Health Check
+    
+    D27: グレースフルデグラデーション対応
+    - healthy: 全コアサービス正常
+    - degraded: オプショナルサービス障害（RAG機能は継続）
+    - unhealthy: コアサービス障害
+    """
     search_status = "unknown"
     openai_status = "unknown"
     cosmos_status = "disabled"
+    degraded_services = []
     
-    # Search サービス確認
+    # Search サービス確認（コア）
     try:
         results = search_service.keyword_search("test", top_k=1)
         search_status = "healthy"
@@ -190,7 +198,7 @@ async def health_check(
         search_status = f"unhealthy: {str(e)[:50]}"
         logger.error(f"Search health check failed: {e}")
     
-    # OpenAI サービス確認
+    # OpenAI サービス確認（コア）
     try:
         embedding = agent_service.get_embedding("test")
         if embedding and len(embedding) == 1536:
@@ -201,17 +209,38 @@ async def health_check(
         openai_status = f"unhealthy: {str(e)[:50]}"
         logger.error(f"OpenAI health check failed: {e}")
     
-    # Cosmos DB確認
+    # Cosmos DB確認（オプショナル）
     conv_service = get_conversation_service()
     if conv_service:
         try:
             cosmos_health = conv_service.health_check()
             cosmos_status = cosmos_health.get("status", "unknown")
+            
+            # オプショナルサービスの障害を記録
+            if cosmos_status != "healthy":
+                degraded_services.append("cosmos_db")
         except Exception as e:
             cosmos_status = f"unhealthy: {str(e)[:50]}"
+            degraded_services.append("cosmos_db")
+            logger.warning(f"Cosmos DB health check failed (optional service): {e}")
     
-    # 全体ステータス判定（Cosmos DBはオプショナルなのでhealthy判定に含めない）
-    overall = "healthy" if search_status == "healthy" and openai_status == "healthy" else "degraded"
+    # 全体ステータス判定
+    core_healthy = search_status == "healthy" and openai_status == "healthy"
+    
+    if core_healthy and not degraded_services:
+        overall = "healthy"
+        message = "All services operational"
+    elif core_healthy and degraded_services:
+        overall = "degraded"
+        message = f"Core services healthy, optional services degraded: {', '.join(degraded_services)}"
+    else:
+        overall = "unhealthy"
+        unhealthy_cores = []
+        if search_status != "healthy":
+            unhealthy_cores.append("search")
+        if openai_status != "healthy":
+            unhealthy_cores.append("openai")
+        message = f"Core services unhealthy: {', '.join(unhealthy_cores)}"
     
     return RAGHealthResponse(
         status=overall,
@@ -219,6 +248,8 @@ async def health_check(
         index_name=settings.AZURE_SEARCH_INDEX,
         openai_service=openai_status,
         cosmos_db=cosmos_status,
+        degraded_services=degraded_services if degraded_services else None,
+        message=message,
     )
 
 

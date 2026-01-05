@@ -668,6 +668,68 @@ scripts/quick_e2e_test.py      # 手動実行用簡易スクリプト
 
 ---
 
+## 2026-01-05: エラーハンドリングパターン（D27）
+
+**Status**: Accepted
+
+**Context**
+- Cosmos DB接続エラー時のRAGシステム全体への影響を最小化したい
+- オプショナルサービスの障害でコア機能が停止しないようにしたい
+- エラー状態を明確に管理・報告したい
+
+**Decision**
+- グレースフルデグラデーションパターンを採用
+- リポジトリ層で`_safe_operation`ラッパーによるエラー吸収
+- サービス層でフォールバック値（空リスト、None、0）を返却
+- ヘルスチェックで`healthy`/`degraded`/`unhealthy`の3段階ステータス
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Circuit Breaker | 自動復旧、負荷軽減 | 実装複雑、外部ライブラリ依存 | オーバーエンジニアリング |
+| Retry Pattern | 一時的エラー対応 | レイテンシ増加、無限ループリスク | 永続的エラーには無効 |
+| Fail Fast | シンプル、明確 | UX悪化、コア機能も停止 | オプショナル機能で不適切 |
+
+**Consequences**
+- Cosmos DB障害時もRAG検索・回答生成は継続
+- 会話履歴は一時的に利用不可（復旧後は再利用可能）
+- ヘルスチェックで障害サービスを明示的に報告
+
+**Validation**
+- モックテストで障害シナリオを検証
+- `test_d27_error_handling.py`でユニットテスト作成
+
+---
+
+## 2026-01-05: 接続状態管理（D27）
+
+**Status**: Accepted
+
+**Context**
+- Cosmos DB接続状態をプロパティで公開し、呼び出し元で判断できるようにしたい
+- 再接続ロジックを一元管理したい
+
+**Decision**
+- `ConnectionState` Enumで状態管理（CONNECTED/DISCONNECTED/ERROR）
+- `is_available`プロパティで状態公開
+- `_ensure_connection`メソッドで再接続試行を一元化
+
+**Alternatives Considered**
+| Option | Pros | Cons | Rejection Reason |
+|--------|------|------|------------------|
+| Boolean flag | シンプル | 状態が不明確 | ERRORとDISCONNECTEDの区別不可 |
+| 毎回接続テスト | 常に最新状態 | パフォーマンス悪化 | API呼び出しごとにオーバーヘッド |
+| 外部状態ストア | 分散環境対応 | 複雑、追加依存 | 単一インスタンスで不要 |
+
+**Consequences**
+- 状態遷移が明確でデバッグしやすい
+- ヘルスチェックで詳細な状態報告が可能
+
+**Validation**
+- `ConnectionState.ERROR`時の挙動をテストで検証
+
+---
+
 # 以下は既存のDecision Records（省略せず含める）
 
 <!-- D25以前の記録は実際のファイルから継続 -->
